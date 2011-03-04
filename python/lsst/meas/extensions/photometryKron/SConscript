@@ -1,0 +1,17 @@
+# -*- python -*-
+Import("env")
+import re
+
+
+thisPkg   = env.thisPkg
+pythonPkg = env.pythonPkg
+
+incProds = "utils daf_base daf_data daf_persistence pex_exceptions "
+incProds += "pex_logging pex_policy security afw meas_algorithms"
+env.CheckSwig("python", ilang="c++", includedProducts=incProds)
+
+sharedObj = "_" + pythonPkg
+swigFile  = pythonPkg + ".i"
+env.LoadableModuleIncomplete(sharedObj, swigFile,
+                             CCFLAGS=re.sub("-Wall", "", " ".join(env['CCFLAGS'])),
+                             LIBS=env.getlibs(thisPkg))

@@ -1,0 +1,13 @@
+# -*- python -*-
+import glob, re, os, sys
+Import('env')
+
+thisPkg    = env.thisPkg
+pythonPkg  = env.pythonPkg
+pythonPath = env.pythonPath
+
+thisLib = os.path.join("..", "lib", "lib"+thisPkg+env['LDMODULESUFFIX'])
+for fileName in glob.glob("*.cc"):
+    env.Depends(fileName, thisLib)
+    env.Program(fileName, LIBS=env.getlibs(thisPkg))
+

@@ -1,0 +1,8 @@
+#<?cfg paf policy ?>
+# Default measure sources policy file
+
+shape: {
+    KRON: {
+        enabled: true
+    }
+}

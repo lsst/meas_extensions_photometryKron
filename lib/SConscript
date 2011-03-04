@@ -1,0 +1,15 @@
+# -*- python -*-
+Import('env')
+import glob
+import os
+
+thisPkg = env.thisPkg
+
+ccFiles = glob.glob("../src/*.cc")
+try:
+    ccFiles = env.SourcesForSharedLibrary(ccFiles)
+except AttributeError:                  # requires sconsUtils > 3.3
+    pass
+
+env.SharedLibrary(thisPkg, ccFiles,
+                  LIBS=[x for x in env.getlibs(thisPkg) if x != thisPkg])
