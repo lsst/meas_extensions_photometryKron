@@ -31,18 +31,32 @@ namespace algorithms {
  */
 class KronPhotometry : public afwDetection::Photometry
 {
+    enum { RADIUS = Photometry::NVALUE,
+           NVALUE = RADIUS + 1 };
+
 public:
     typedef boost::shared_ptr<KronPhotometry> Ptr;
     typedef boost::shared_ptr<KronPhotometry const> ConstPtr;
 
     /// Ctor
-    KronPhotometry(double flux, double fluxErr=std::numeric_limits<double>::quiet_NaN()) :
-        afwDetection::Photometry(flux, fluxErr) {}
+    KronPhotometry(double radius, double flux, double fluxErr=std::numeric_limits<double>::quiet_NaN()) :
+        afwDetection::Photometry() {
+        init();                         // This allocates space for everything in the schema
+
+        set<FLUX>(flux);
+        set<FLUX_ERR>(fluxErr);
+        set<RADIUS>(radius);
+    }
 
     /// Add desired fields to the schema
     virtual void defineSchema(afwDetection::Schema::Ptr schema ///< our schema; == _mySchema
                      ) {
         Photometry::defineSchema(schema);
+        schema->add(afwDetection::SchemaEntry("radius", RADIUS, afwDetection::Schema::DOUBLE, 1, "pixels"));
+    }
+
+    double getRadius(int) const {
+        return get<RADIUS, double>();
     }
 
     static bool doConfigure(lsst::pex::policy::Policy const& policy)
@@ -135,11 +149,12 @@ afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exp
                                                             CONST_PTR(afwDetection::Source) source
                                                            )
 {
+    double radius = std::numeric_limits<double>::quiet_NaN();
     double flux = std::numeric_limits<double>::quiet_NaN();
     double fluxErr = std::numeric_limits<double>::quiet_NaN();
 
     if (!peak) {
-        return boost::make_shared<KronPhotometry>(flux, fluxErr);
+        return boost::make_shared<KronPhotometry>(radius, flux, fluxErr);
     }
 
     typedef typename ExposureT::MaskedImageT MaskedImageT;
@@ -158,10 +173,16 @@ afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exp
     double Ixy = std::numeric_limits<double>::quiet_NaN(); // <xy>
     double Iyy = std::numeric_limits<double>::quiet_NaN(); // <yy>
     try {
-        CONST_PTR(lsst::afw::detection::Measurement<lsst::afw::detection::Shape>) shape = source->getShape();
-        Ixx = shape->find("SDSS")->getIxx();
-        Ixy = shape->find("SDSS")->getIxy();
-        Iyy = shape->find("SDSS")->getIyy();
+        if (source) {
+            CONST_PTR(lsst::afw::detection::Measurement<lsst::afw::detection::Shape>)
+                shape = source->getShape();
+            
+            Ixx = shape->find("SDSS")->getIxx();
+            Ixy = shape->find("SDSS")->getIxy();
+            Iyy = shape->find("SDSS")->getIyy();
+        } else {
+            throw LSST_EXCEPT(lsst::pex::exceptions::NotFoundException, "No Source");
+        }
     } catch (lsst::pex::exceptions::Exception& e) {
         detail::SdssShapeImpl shapeImpl;
         
@@ -186,8 +207,12 @@ afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exp
     double const Iuu_m_Ivv = ::sqrt(::pow(Ixx - Iyy, 2) + 4*::pow(Ixy, 2)); // <u^2> - <v^2>
     double const Iuu = 0.5*(Iuu_p_Ivv + Iuu_m_Ivv);
     double const Ivv = 0.5*(Iuu_p_Ivv - Iuu_m_Ivv);
-    double const theta = ::atan2(2*Ixy, Ixx - Iyy);
+    double const theta = 0.5*::atan2(2*Ixy, Ixx - Iyy);
     
+    radius = ::sqrt(Iuu);               // major axis
+    flux = ::sqrt(Ivv);                 // minor axis
+    fluxErr = theta*180/M_PI;
+
 #if 0
     {
         std::pair<double, double> flux_fluxErr = getKronFlux(mimage, _background, xcen, ycen, _shiftmax);
@@ -196,7 +221,7 @@ afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exp
     }
 #endif
 
-    return boost::make_shared<KronPhotometry>(flux, fluxErr);
+    return boost::make_shared<KronPhotometry>(radius, flux, fluxErr);
 }
 
 /*
