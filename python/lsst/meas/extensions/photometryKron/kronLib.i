@@ -21,6 +21,9 @@
  * the GNU General Public License along with this program.  If not,
  * see <http://www.lsstcorp.org/LegalNotices/>.
  */
+/*
+ * This module is only needed to allow us to call the constructor that registers KRON measurements
+ */
 
 %define kronLib_DOCSTRING
 "
@@ -30,37 +33,3 @@ Interface to Kron magnitudes
 
 %feature("autodoc", "1");
 %module(package="lsst.meas.extensions.photometryKron.kronLib", docstring=kronLib_DOCSTRING) kronLib
-
-%pythonnondynamic;
-%naturalvar;  // use const reference typemaps
-
-%include "lsst/p_lsstSwig.i"
-
-%lsst_exceptions()
-
-%{
-#include "lsst/pex/policy.h"
-#include "lsst/afw/geom.h"
-#include "lsst/meas/extensions/detail/KronPhotometry.h"
-%}
-
-%import "lsst/afw/detection/detectionLib.i"
-
-SWIG_SHARED_PTR_DERIVED(KronShapePtr,
-                        lsst::afw::detection::Photometry, lsst::meas::algorithms::detail::KronPhotometry);
-
-%include "lsst/meas/extensions/detail/KronPhotometry.h"
-
-%inline %{
-    PTR(lsst::meas::algorithms::detail::KronPhotometry)
-    cast_Kron(PTR(lsst::afw::detection::Photometry) photom) {
-        return boost::shared_dynamic_cast<lsst::meas::algorithms::detail::KronPhotometry>(photom);
-    }
-%}
-
-%extend lsst::meas::algorithms::detail::KronPhotometry {
-    %pythoncode {
-    def getKronRadius(self):
-        return self.getParameter()
-    }
-}

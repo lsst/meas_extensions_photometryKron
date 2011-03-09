@@ -97,7 +97,6 @@ class KronPhotometryTestCase(unittest.TestCase):
         photom = mp.measure(peak)
 
         values = photom.find("KRON")
-        print Kron.cast_Kron(values).getKronRadius()
         print values.getParameter(), values.getFlux(), values.getFluxErr()
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
