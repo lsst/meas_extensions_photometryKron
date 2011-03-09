@@ -18,7 +18,7 @@ import lsst.afw.detection as afwDetection
 import lsst.afw.math as afwMath
 import lsst.afw.image as afwImage
 import lsst.meas.algorithms as measAlg
-import lsst.meas.extensions.photometryKron
+import lsst.meas.extensions.photometryKron as Kron
 
 try:
     type(verbose)
@@ -97,7 +97,8 @@ class KronPhotometryTestCase(unittest.TestCase):
         photom = mp.measure(peak)
 
         values = photom.find("KRON")
-        print values.getFlux(), values.getFluxErr()
+        print Kron.cast_Kron(values).getKronRadius()
+        print values.getParameter(), values.getFlux(), values.getFluxErr()
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 

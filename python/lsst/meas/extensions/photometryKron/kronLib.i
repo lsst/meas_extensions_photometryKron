@@ -24,7 +24,7 @@
 
 %define kronLib_DOCSTRING
 "
-Various swigged-up C++ classes for testing
+Interface to Kron magnitudes
 "
 %enddef
 
@@ -38,15 +38,29 @@ Various swigged-up C++ classes for testing
 
 %lsst_exceptions()
 
-#if 0
 %{
+#include "lsst/pex/policy.h"
 #include "lsst/afw/geom.h"
-#include "lsst/meas/algorithms/Photometry.h"
+#include "lsst/meas/extensions/detail/KronPhotometry.h"
 %}
 
 %import "lsst/afw/detection/detectionLib.i"
 
-SWIG_SHARED_PTR_DERIVED(KronShapePtr, lsst::afw::detection::Shape, lsst::meas::extensions::photometryKron::KronPhotometry);
+SWIG_SHARED_PTR_DERIVED(KronShapePtr,
+                        lsst::afw::detection::Photometry, lsst::meas::algorithms::detail::KronPhotometry);
 
-//%include "src/KronPhotometry.c"
-#endif
+%include "lsst/meas/extensions/detail/KronPhotometry.h"
+
+%inline %{
+    PTR(lsst::meas::algorithms::detail::KronPhotometry)
+    cast_Kron(PTR(lsst::afw::detection::Photometry) photom) {
+        return boost::shared_dynamic_cast<lsst::meas::algorithms::detail::KronPhotometry>(photom);
+    }
+%}
+
+%extend lsst::meas::algorithms::detail::KronPhotometry {
+    %pythoncode {
+    def getKronRadius(self):
+        return self.getParameter()
+    }
+}

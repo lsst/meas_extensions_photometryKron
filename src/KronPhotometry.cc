@@ -13,6 +13,7 @@
 #include "lsst/afw/detection/Photometry.h"
 #include "lsst/meas/algorithms/detail/SdssShape.h"
 #include "lsst/meas/algorithms/Photometry.h"
+#include "lsst/meas/extensions/detail/KronPhotometry.h"
 
 namespace pexExceptions = lsst::pex::exceptions;
 namespace pexLogging = lsst::pex::logging;
@@ -24,69 +25,50 @@ namespace afwMath = lsst::afw::math;
 namespace lsst {
 namespace meas {
 namespace algorithms {
+namespace detail {
 
 /**
  * @brief A class that knows how to calculate fluxes using the KRON photometry algorithm
  * @ingroup meas/algorithms
  */
-class KronPhotometry : public afwDetection::Photometry
+
+/// Ctor
+KronPhotometry::KronPhotometry(double radius, double flux, double fluxErr) :
+    afwDetection::Photometry()
 {
-    enum { RADIUS = Photometry::NVALUE,
-           NVALUE = RADIUS + 1 };
+    init();                         // This allocates space for everything in the schema
+    
+    set<FLUX>(flux);
+    set<FLUX_ERR>(fluxErr);
+    set<RADIUS>(radius);
+}
 
-public:
-    typedef boost::shared_ptr<KronPhotometry> Ptr;
-    typedef boost::shared_ptr<KronPhotometry const> ConstPtr;
+/// Add desired fields to the schema
+void KronPhotometry::defineSchema(afwDetection::Schema::Ptr schema ///< our schema; == _mySchema
+                                 )
+{
+    Photometry::defineSchema(schema);
+    schema->add(afwDetection::SchemaEntry("radius", RADIUS, afwDetection::Schema::DOUBLE, 1, "pixels"));
+}
+    
+double KronPhotometry::getParameter(int) const {
+    return get<RADIUS, double>();
+}
 
-    /// Ctor
-    KronPhotometry(double radius, double flux, double fluxErr=std::numeric_limits<double>::quiet_NaN()) :
-        afwDetection::Photometry() {
-        init();                         // This allocates space for everything in the schema
-
-        set<FLUX>(flux);
-        set<FLUX_ERR>(fluxErr);
-        set<RADIUS>(radius);
+bool KronPhotometry::doConfigure(lsst::pex::policy::Policy const& policy)
+{
+    if (policy.isDouble("nSigmaForRad")) {
+        _nSigmaForRad = policy.getDouble("nSigmaForRad");
     }
-
-    /// Add desired fields to the schema
-    virtual void defineSchema(afwDetection::Schema::Ptr schema ///< our schema; == _mySchema
-                     ) {
-        Photometry::defineSchema(schema);
-        schema->add(afwDetection::SchemaEntry("radius", RADIUS, afwDetection::Schema::DOUBLE, 1, "pixels"));
-    }
-
-    double getRadius(int) const {
-        return get<RADIUS, double>();
-    }
-
-    static bool doConfigure(lsst::pex::policy::Policy const& policy)
-    {
-        if (policy.isDouble("nSigmaForRad")) {
-            _nSigmaForRad = policy.getDouble("nSigmaForRad");
-        }
-        if (policy.isDouble("background")) {
-            _background = policy.getDouble("background");
-        } 
-        if (policy.isDouble("shiftmax")) {
-            _shiftmax = policy.getDouble("shiftmax");
-        } 
-        
-        return true;
-    }
-    template<typename ImageT>
-    static Photometry::Ptr doMeasure(CONST_PTR(ImageT),
-                                     CONST_PTR(afwDetection::Peak),
-                                     CONST_PTR(afwDetection::Source)
-                                    );
-
-private:
-    static double _nSigmaForRad;
-    static double _background;
-    static double _shiftmax;
-
-    KronPhotometry(void) : afwDetection::Photometry() { }
-    LSST_SERIALIZE_PARENT(afwDetection::Photometry)
-};
+    if (policy.isDouble("background")) {
+        _background = policy.getDouble("background");
+    } 
+    if (policy.isDouble("shiftmax")) {
+        _shiftmax = policy.getDouble("shiftmax");
+    } 
+    
+    return true;
+}
 
 LSST_REGISTER_SERIALIZER(KronPhotometry)
 
@@ -246,4 +228,4 @@ namespace {
     
 // \endcond
 
-}}}
+}}}}
