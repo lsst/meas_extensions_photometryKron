@@ -179,12 +179,6 @@ public:
     /// Return the variance of the Footprint's <r>
     double getIrVar() const { return _sumRVar/_sum - getIr()*getIr(); }
 
-#if 1
-    /// Return the Footprint's <r>
-    double getSum() const { return _sum; }
-    double getSumR() const { return _sumR; }
-    double getSumRVar() const { return _sumRVar; }
-#endif
 private:
     double const _xcen;                 // center of object
     double const _ycen;                 // center of object
@@ -198,52 +192,10 @@ private:
 
 }
 
-namespace {
-    
-template<typename ImageT>
-std::pair<double, double>
-getKronFlux(
-        ImageT const& mimage,           // the data to process
-        double background,               // background level
-        double xcen, double ycen,         // centre of object
-        double shiftmax                  // max allowed centroid shift
-               )
-{
-    double flux = std::numeric_limits<double>::quiet_NaN();
-    double fluxErr = std::numeric_limits<double>::quiet_NaN();
-
-    detail::SdssShapeImpl shapeImpl;
-
-    if (!detail::getAdaptiveMoments(mimage, background, xcen, ycen, shiftmax, &shapeImpl)) {
-        ;                               // Should set a flag here
-    } else {
-        /*
-         * The shape is an ellipse that's axis-aligned in (u, v) [<uv> = 0] after rotation by theta:
-         * <x^2> + <y^2> = <u^2> + <v^2>
-         * <x^2> - <y^2> = cos(2 theta)*(<u^2> - <v^2>)
-         * 2*<xy>        = sin(2 theta)*(<u^2> - <v^2>)
-         */
-        double const Mxx = shapeImpl.getIxx(); // <x^2>
-        double const Mxy = shapeImpl.getIxy(); // <xy>
-        double const Myy = shapeImpl.getIyy(); // <y^2>
-        
-        double const Muu_p_Mvv = Mxx + Myy;                             // <u^2> + <v^2>
-        double const Muu_m_Mvv = ::sqrt(::pow(Mxx - Myy, 2) + 4*::pow(Mxy, 2)); // <u^2> - <v^2>
-        double const Muu = 0.5*(Muu_p_Mvv + Muu_m_Mvv);
-        double const Mvv = 0.5*(Muu_p_Mvv - Muu_m_Mvv);
-        
-        double const scale = 2*PI*::sqrt(Muu*Mvv);
-        flux = scale*shapeImpl.getI0();
-        fluxErr = scale*shapeImpl.getI0Err();
-    }
-
-    return std::make_pair(flux, fluxErr);
-}
-
-}
 /************************************************************************************************************/
 /**
- * Create an elliptical Footprint
+ * Create an elliptical Footprint.  This should move to afw (probably as a Footprint ctor, in which
+ * case it'll return an object, not a pointer)
  */
 PTR(afwDetection::Footprint)
 ellipticalFootprint(afwGeom::Point2I const& center, //!< The center of the circle
@@ -303,13 +255,13 @@ ellipticalFootprint(afwGeom::Point2I const& center, //!< The center of the circl
 
 /************************************************************************************************************/
 /**
- * Calculate the desired kron flux
+ * Calculate the desired Kron radius and flux
  */
 template<typename ExposureT>
 afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exposure,
-                                                            CONST_PTR(afwDetection::Peak) peak,
-                                                            CONST_PTR(afwDetection::Source) source
-                                                           )
+                                                        CONST_PTR(afwDetection::Peak) peak,
+                                                        CONST_PTR(afwDetection::Source) source
+                                                       )
 {
     double radius = std::numeric_limits<double>::quiet_NaN();
     double flux = std::numeric_limits<double>::quiet_NaN();
@@ -356,9 +308,6 @@ afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exp
         Ixy = shapeImpl.getIxy();
         Iyy = shapeImpl.getIyy();
     }
-#if 0
-    std::cout << "SDSS moments " << " " << Ixx << " " << Ixy << " " << Iyy << std::endl;
-#endif
     /*
      * The shape is an ellipse that's axis-aligned in (u, v) [<uv> = 0] after rotation by theta:
      * <x^2> + <y^2> = <u^2> + <v^2>
@@ -381,11 +330,8 @@ afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exp
                                  
     iRFunctor.apply(*foot);
     radius = iRFunctor.getIr();
-#if 1                                   // added accessors to support this
-    flux = iRFunctor.getSum();
-    fluxErr = iRFunctor.getSumR();
-#endif
-    double const r2 = _nRadiusForFlux*radius;
+
+    double const r2 = _nRadiusForFlux*radius; // radius to measure within
 
     std::pair<double, double> const fluxFluxErr =
         photometry::calculateSincApertureFlux(exposure->getMaskedImage(), peak->getFx(), peak->getFy(),
