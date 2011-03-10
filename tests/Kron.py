@@ -41,31 +41,30 @@ class KronPhotometryTestCase(unittest.TestCase):
     """A test case for measuring Kron quantities"""
 
     def setUp(self):
-        pass
+        self.flux = 1e5
+        self.width, self.height = 200, 200
         
     def tearDown(self):
         pass
 
-    def makeAndMeasure(self, measureKron, a, b, theta, dx=0.0, dy=0.0, nsigma=6):
+    def makeAndMeasure(self, measureKron, a, b, theta, dx=0.0, dy=0.0, nsigma=6, kfac=2):
         """Make and measure an elliptical Gaussian"""
 
-        width, height = 200, 200
-        xcen, ycen = 0.5*width + dx, 0.5*height + dy
+        xcen, ycen = 0.5*self.width + dx, 0.5*self.height + dy
         #
         # Make the object
         #
         if a < b:
             a, b = b, a
             theta += 90
-        flux = 1e5
-        I0 = flux/(2*math.pi*a*b)
+        I0 = self.flux/(2*math.pi*a*b)
 
-        gal = afwImage.ImageF(width, height)
+        gal = afwImage.ImageF(self.width, self.height)
 
         c, s = math.cos(math.radians(theta)), math.sin(math.radians(theta))
         I, Iuu, Ivv = 0.0, 0.0, 0.0
-        for y in range(height):
-            for x in range(width):
+        for y in range(self.height):
+            for x in range(self.width):
                 dx, dy = x - xcen, y - ycen
                 u =  c*dx + s*dy
                 v = -s*dx + c*dy
@@ -84,7 +83,7 @@ class KronPhotometryTestCase(unittest.TestCase):
         objImg.getMaskedImage().getVariance().set(1.0)
         del gal
 
-        kronValues = measureKron(objImg, xcen, ycen, nsigma)
+        kronValues = measureKron(objImg, xcen, ycen, nsigma, kfac)
 
         if display:
             frame = 0
@@ -104,7 +103,7 @@ class KronPhotometryTestCase(unittest.TestCase):
 
         return kronValues
 
-    def measureKron(self, objImg, xcen, ycen, nsigma):
+    def measureKron(self, objImg, xcen, ycen, nsigma, kfac):
         """Measure Kron quantities using the C++ code"""
         #
         # Now measure some annuli
@@ -116,9 +115,9 @@ class KronPhotometryTestCase(unittest.TestCase):
             """#<?cfg paf policy?>
             KRON: {
                 nSigmaForRad: %f
-                enabled: true
+                nRadiusForFlux: %f
             }
-            """ % (nsigma)))
+            """ % (nsigma, kfac)))
 
         mp.configure(policy)
         peak = afwDetection.Peak(xcen, ycen)
@@ -129,7 +128,7 @@ class KronPhotometryTestCase(unittest.TestCase):
 
         return R_K, flux_K, fluxErr_K
 
-    def measureKronInPython(self, objImg, xcen, ycen, nsigma):
+    def measureKronInPython(self, objImg, xcen, ycen, nsigma, kfac):
         """Measure the Kron quantities of an elliptical Gaussian in python"""
         #
         # Measure moments using SDSS shape algorithm
@@ -206,6 +205,9 @@ class KronPhotometryTestCase(unittest.TestCase):
         #
         # Make and the objects
         #
+        kfac = 2.5                      # multiple of R_Kron to use for Flux_Kron
+        kfac = 1.5
+
         ab_vals = (0.5, 1.0, 2.0, 3.0, 4.0, 5.0, )
         #ab_vals = (1.0,)
         for dx in (0.0, 0.5,):
@@ -216,30 +218,78 @@ class KronPhotometryTestCase(unittest.TestCase):
                             if b > a:
                                 continue
 
-                            R_K, flux_K, fluxErr_K = self.makeAndMeasure(measureKron, a, b, theta, dx=dx, dy=dy)
-                            truth = max(a,b)*math.sqrt(math.pi/2)
+                            R_K, flux_K, fluxErr_K = self.makeAndMeasure(measureKron, a, b, theta,
+                                                                         dx=dx, dy=dy, kfac=kfac)
+                            R_truth = math.sqrt(math.pi/2)
+                            flux_truth = self.flux*(1 - math.exp(-0.5*(kfac*R_truth)**2))
+                            R_truth = max(a,b)*R_truth
 
                             ID = "a,b %4.1f %4.1f dx,dy = %.1f,%.1f" % (a, b, dx, dy)
-                            if not False:
-                                print "%s R_K %.3f %.3f %5.1f%%" % (ID, R_K, truth, 100*(R_K/truth - 1))
+                            if False:
+                                print "%s R_K %.3f %.3f %5.2f pixels" % (ID, R_K, R_truth, (R_K - R_truth))
+                            if False:
+                                print "%s flux_K %.3f %.3f %5.1f%%" % (ID, flux_K, flux_truth,
+                                                                       100*(flux_K/flux_truth - 1))
 
-                            # Set R_K tolerance in pixels
-                            if b <= 0.5:
-                                if a <= 0.5:
-                                    tol = 25
-                                elif a <= 1.0:
-                                    tol = 15
-                                else:
-                                    tol = 10
-                            elif b <= 1:
-                                tol = 2.5
-                            else:
-                                tol = 0.75
-
-                            if abs(truth - R_K) > 1e-2*tol:
+                            if abs(R_truth - R_K) > 1e-2*self.getTolRad(a, b):
                                 self.assertTrue(False,
-                                                ("%s  R_Kron: %g v. exact value %g (error %.1f%%)" %
-                                                 (ID, R_K, truth, 100*(R_K - truth))))
+                                                ("%s  R_Kron: %g v. exact value %g (error %.2f pixels)" %
+                                                 (ID, R_K, R_truth, (R_K - R_truth))))
+                            if abs(flux_truth/flux_K - 1) > 1e-2*self.getTolFlux(a, b, kfac):
+                                self.assertTrue(False,
+                                                ("%s  flux_Kron: %g v. exact value %g (error %.1f%%)" %
+                                                 (ID, flux_K, flux_truth, 100*(flux_K/flux_truth - 1))))
+
+    def getTolRad(self, a, b):
+        """Return R_K tolerance in hundredths of a pixel"""
+
+        if b <= 0.5:
+            if a <= 0.5:
+                tol = 25
+            elif a <= 1:
+                tol = 14
+            elif a <= 2:
+                tol = 10
+            else:
+                tol = 6
+        elif b <= 1:
+            tol = 2.5
+        else:
+            tol = 0.75
+
+        return tol
+
+    def getTolFlux(self, a, b, kfac):
+        """Return Flux_K tolerance in percent"""
+        if b <= 0.5:
+            if a <= 0.5:
+                if kfac > 2:
+                    tol = 5.0
+                else:
+                    tol = 16.0
+            else:
+                if kfac > 2:
+                    tol = 3.0
+                elif kfac > 1.5:
+                    tol = 5.0
+                else:
+                    tol = 7.0
+        elif b <= 1:
+            if kfac > 2:
+                tol = 0.25
+            elif kfac > 1.5:
+                tol = 0.5
+            else:
+                tol = 1.2
+        elif b <= 2:
+            if kfac > 1.5:
+                tol = 0.1
+            else:
+                tol = 0.6
+        else:
+            tol = 0.1
+
+        return tol
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 

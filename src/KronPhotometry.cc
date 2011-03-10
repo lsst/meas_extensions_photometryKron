@@ -370,24 +370,6 @@ afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exp
     double const Iuu = 0.5*(Iuu_p_Ivv + Iuu_m_Ivv);                         // (major axis)^2; a
     double const Ivv = 0.5*(Iuu_p_Ivv - Iuu_m_Ivv);                         // (minor axis)^2; b
     double const theta = 0.5*::atan2(2*Ixy, Ixx - Iyy);                     // angle of a +ve from x axis
-#if 0
-    double const c = ::cos(theta);                                          // cos(theta) (!)
-    double const s = ::sin(theta);                                          // sin(theta) (!)
-    
-    double const xmax = ::sqrt(c*c*Iuu + s*s*Ivv); // max extent of ellipse in x-direction
-    double const ymax = ::sqrt(s*s*Iuu + c*c*Ivv); // max extent of ellipse in y-direction
-#endif
-    radius = ::sqrt(Iuu);
-    flux = ::sqrt(Ivv);
-    fluxErr = theta*180/PI;
-
-#if 0
-    {
-        std::pair<double, double> flux_fluxErr = getKronFlux(mimage, _background, xcen, ycen, _shiftmax);
-        flux = flux_fluxErr.first;
-        fluxErr = flux_fluxErr.second;
-    }
-#endif
 
     double const a = _nSigmaForRadius*::sqrt(Iuu);
     double const b = _nSigmaForRadius*::sqrt(Ivv);
@@ -403,6 +385,13 @@ afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exp
     flux = iRFunctor.getSum();
     fluxErr = iRFunctor.getSumR();
 #endif
+    double const r2 = _nRadiusForFlux*radius;
+
+    std::pair<double, double> const fluxFluxErr =
+        photometry::calculateSincApertureFlux(exposure->getMaskedImage(), peak->getFx(), peak->getFy(),
+                                              0.0, r2, theta, 1 - b/a);
+    flux = fluxFluxErr.first;
+    fluxErr = fluxFluxErr.second;
 
     return boost::make_shared<KronPhotometry>(radius, flux, fluxErr);
 }
