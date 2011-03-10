@@ -2,6 +2,7 @@
 #include <numeric>
 #include <cmath>
 #include <functional>
+#include "boost/math/constants/constants.hpp"
 #include "lsst/pex/exceptions.h"
 #include "lsst/pex/logging/Trace.h"
 #include "lsst/afw/geom/Point.h"
@@ -20,6 +21,9 @@ namespace afwDetection = lsst::afw::detection;
 namespace afwGeom = lsst::afw::geom;
 namespace afwImage = lsst::afw::image;
 namespace afwMath = lsst::afw::math;
+
+double const PI = boost::math::constants::pi<double>();          // ~ 355/113.0
+double const ROOT2 = boost::math::constants::root_two<double>(); // sqrt(2)
 
 namespace lsst {
 namespace meas {
@@ -61,8 +65,11 @@ public:
 
     static bool doConfigure(lsst::pex::policy::Policy const& policy)
     {
-        if (policy.isDouble("nSigmaForRad")) {
-            _nSigmaForRad = policy.getDouble("nSigmaForRad");
+        if (policy.isDouble("nSigmaForRadius")) {
+            _nSigmaForRadius = policy.getDouble("nSigmaForRadius");
+        }
+        if (policy.isDouble("nRadiusForFlux")) {
+            _nRadiusForFlux = policy.getDouble("nRadiusForFlux");
         }
         if (policy.isDouble("background")) {
             _background = policy.getDouble("background");
@@ -80,7 +87,8 @@ public:
                                     );
 
 private:
-    static double _nSigmaForRad;
+    static double _nSigmaForRadius;
+    static double _nRadiusForFlux;
     static double _background;
     static double _shiftmax;
 
@@ -90,11 +98,105 @@ private:
 
 LSST_REGISTER_SERIALIZER(KronPhotometry)
 
-double KronPhotometry::_nSigmaForRad = 6.0;   // Size of aperture (in sigma) to estimate Kron radius
-double KronPhotometry::_background = 0.0;     // the frame's background level
-double KronPhotometry::_shiftmax = 10;        // Max allowed centroid shift
+double KronPhotometry::_nSigmaForRadius = 6.0; // Size of aperture (in sigma) to estimate Kron radius
+double KronPhotometry::_nRadiusForFlux = 2.0;  // number of R_Kron to measure flux in
+double KronPhotometry::_background = 0.0;      // the frame's background level
+double KronPhotometry::_shiftmax = 10;         // Max allowed centroid shift
 
 /************************************************************************************************************/
+
+namespace {
+template <typename MaskedImageT, typename WeightImageT>
+class FootprintFindMoment : public afwDetection::FootprintFunctor<MaskedImageT> {
+public:
+    FootprintFindMoment(MaskedImageT const& mimage, ///< The image the source lives in
+                        double const xcen, double const ycen, // center of the object
+                        double const ab,                      // axis ratio
+                        double const theta                    // rotation of ellipse +ve from x axis
+                       ) : afwDetection::FootprintFunctor<MaskedImageT>(mimage),
+                           _xcen(xcen), _ycen(ycen),
+                           _ab(ab),
+                           _cosTheta(::cos(theta)),
+                           _sinTheta(::sin(theta)),
+                           _sum(0.0), _sumR(0.0), _sumRVar(0), _x0(0), _y0(0) {}
+    
+    /// @brief Reset everything for a new Footprint
+    void reset() {}        
+    void reset(afwDetection::Footprint const& foot) {
+        _sum = _sumR = _sumRVar = 0.0;
+
+        afwImage::BBox const& bbox(foot.getBBox());
+        _x0 = bbox.getX0();
+        _y0 = bbox.getY0();
+
+#if 0
+        if (bbox.getDimensions() != _wimage->getDimensions()) {
+            throw LSST_EXCEPT(pexExceptions::LengthErrorException,
+                              (boost::format("Footprint at %d,%d -- %d,%d is wrong size "
+                                             "for %d x %d weight image") %
+                               bbox.getX0() % bbox.getY0() % bbox.getX1() % bbox.getY1() %
+                               _wimage->getWidth() % _wimage->getHeight()).str());
+        }
+#endif
+    }
+    
+    /// @brief method called for each pixel by apply()
+    void operator()(typename MaskedImageT::xy_locator iloc, ///< locator pointing at the image pixel
+                    int x,                                  ///< column-position of pixel
+                    int y                                   ///< row-position of pixel
+                   ) {
+        typename MaskedImageT::Image::Pixel ival = iloc.image(0, 0);
+        typename MaskedImageT::Variance::Pixel vval = iloc.variance(0, 0);
+        double const dx = x - _xcen;
+        double const dy = y - _ycen;
+        double const du =  dx*_cosTheta + dy*_sinTheta;
+        double const dv = -dx*_sinTheta + dy*_cosTheta;
+
+        double r = ::hypot(du, dv*_ab); // ellipsoidal radius
+#if 1
+        if (dx*dx + dy*dy < 0.25) {     // within a pixel of the centre
+            /*
+             * We gain significant precision for flattened Gaussians by treating the central pixel specially
+             *
+             * If the object's centered in the pixel (and has constant surface brightness) we have <r> == eR;
+             * if it's at the corner <r> = 2*eR; we interpolate between these exact results linearily in the
+             * displacement.
+             */
+            
+            double const eR = 0.38259771140356325; // <r> for a single square pixel, about the centre
+            r = (eR/_ab)*(1 + ROOT2*::hypot(::fmod(du, 1), ::fmod(dv, 1)));
+        }
+#endif
+
+        _sum += ival;
+        _sumR += r*ival;
+        _sumRVar += r*r*vval;
+    }
+
+    /// Return the Footprint's <r>
+    double getIr() const { return _sumR/_sum; }
+
+    /// Return the variance of the Footprint's <r>
+    double getIrVar() const { return _sumRVar/_sum - getIr()*getIr(); }
+
+#if 1
+    /// Return the Footprint's <r>
+    double getSum() const { return _sum; }
+    double getSumR() const { return _sumR; }
+    double getSumRVar() const { return _sumRVar; }
+#endif
+private:
+    double const _xcen;                 // center of object
+    double const _ycen;                 // center of object
+    double const _ab;                   // axis ratio
+    double const _cosTheta, _sinTheta;  // {cos,sin}(angle from x-axis)
+    double _sum;                        // sum of I
+    double _sumR;                       // sum of R*I
+    double _sumRVar;                    // sum of R*R*Var(I)
+    int _x0, _y0;                       // the origin of the current Footprint
+};
+
+}
 
 namespace {
     
@@ -130,13 +232,73 @@ getKronFlux(
         double const Muu = 0.5*(Muu_p_Mvv + Muu_m_Mvv);
         double const Mvv = 0.5*(Muu_p_Mvv - Muu_m_Mvv);
         
-        double const scale = 2*M_PI*::sqrt(Muu*Mvv);
+        double const scale = 2*PI*::sqrt(Muu*Mvv);
         flux = scale*shapeImpl.getI0();
         fluxErr = scale*shapeImpl.getI0Err();
     }
 
     return std::make_pair(flux, fluxErr);
 }
+
+}
+/************************************************************************************************************/
+/**
+ * Create an elliptical Footprint
+ */
+PTR(afwDetection::Footprint)
+ellipticalFootprint(afwGeom::Point2I const& center, //!< The center of the circle
+                    double a,                       //!< Major axis (pixels)
+                    double b,                       //!< Minor axis (pixels)
+                    double theta,                   //!< angle of major axis from x-axis; (radians)
+                    afwImage::BBox const& region=afwImage::BBox() //!< Bounding box of MaskedImage footprint
+                   )
+{
+    PTR(afwDetection::Footprint) foot(new afwDetection::Footprint);
+    foot->setRegion(region);
+    
+    int const xc = center[0];           // x-centre
+    int const yc = center[1];           // y-centre
+
+    double const c = ::cos(theta);
+    double const s = ::sin(theta);
+
+    double const c0 = a*a*s*s + b*b*c*c;
+    double const c1 = c*s*(a*a - b*b)/c0;
+    double const c2 = a*b/c0;
+
+    double const ymax = ::sqrt(c0) + 1; // max extent of ellipse in y-direction
+    //
+    // We go to quite a lot of annoying trouble to ensure that all pixels that are within or intercept
+    // the ellipse are included in the Footprint
+    //
+    double x1, x2, y;
+    for (int i = -ymax; i <= ymax; ++i) {
+        double const dy = (i > 0) ? -0.5 : 0.5;
+        y = i + dy;              // chord at top of pixel (above centre)
+        if (c0 > y*y) {
+            x1 = y*c1 - c2*std::sqrt(c0 - y*y);
+            x2 = y*c1 + c2*std::sqrt(c0 - y*y);
+        } else {
+            x1 = x2 = y*c1;
+        }
+
+        y = i - dy;                     // chord at bottom of pixel (above centre)
+        if (c0 > y*y) {
+            double tmp = y*c1 - c2*std::sqrt(c0 - y*y);
+            if (tmp < x1) {
+                x1 = tmp;
+            }
+
+            tmp = y*c1 + c2*std::sqrt(c0 - y*y);
+            if (tmp > x2) {
+                x2 = tmp;
+            }
+        }
+
+        foot->addSpan(yc + i, xc + x1 + 0.5, xc + x2 + 0.5);
+    }
+
+    return foot;
 }
 
 /************************************************************************************************************/
@@ -205,13 +367,19 @@ afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exp
      */
     double const Iuu_p_Ivv = Ixx + Iyy;                             // <u^2> + <v^2>
     double const Iuu_m_Ivv = ::sqrt(::pow(Ixx - Iyy, 2) + 4*::pow(Ixy, 2)); // <u^2> - <v^2>
-    double const Iuu = 0.5*(Iuu_p_Ivv + Iuu_m_Ivv);
-    double const Ivv = 0.5*(Iuu_p_Ivv - Iuu_m_Ivv);
-    double const theta = 0.5*::atan2(2*Ixy, Ixx - Iyy);
+    double const Iuu = 0.5*(Iuu_p_Ivv + Iuu_m_Ivv);                         // (major axis)^2; a
+    double const Ivv = 0.5*(Iuu_p_Ivv - Iuu_m_Ivv);                         // (minor axis)^2; b
+    double const theta = 0.5*::atan2(2*Ixy, Ixx - Iyy);                     // angle of a +ve from x axis
+#if 0
+    double const c = ::cos(theta);                                          // cos(theta) (!)
+    double const s = ::sin(theta);                                          // sin(theta) (!)
     
-    radius = ::sqrt(Iuu);               // major axis
-    flux = ::sqrt(Ivv);                 // minor axis
-    fluxErr = theta*180/M_PI;
+    double const xmax = ::sqrt(c*c*Iuu + s*s*Ivv); // max extent of ellipse in x-direction
+    double const ymax = ::sqrt(s*s*Iuu + c*c*Ivv); // max extent of ellipse in y-direction
+#endif
+    radius = ::sqrt(Iuu);
+    flux = ::sqrt(Ivv);
+    fluxErr = theta*180/PI;
 
 #if 0
     {
@@ -219,6 +387,21 @@ afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exp
         flux = flux_fluxErr.first;
         fluxErr = flux_fluxErr.second;
     }
+#endif
+
+    double const a = _nSigmaForRadius*::sqrt(Iuu);
+    double const b = _nSigmaForRadius*::sqrt(Ivv);
+    
+    FootprintFindMoment<MaskedImageT, afwDetection::Psf::Image> iRFunctor(mimage, xcen, ycen, a/b, theta);
+    // Build an elliptical Footprint of the proper size
+    afwGeom::Point2I center = afwGeom::makePointI(xcen + 0.5, ycen + 0.5); // the Footprint's centre
+    PTR(afwDetection::Footprint) foot(ellipticalFootprint(center, a, b, theta));
+                                 
+    iRFunctor.apply(*foot);
+    radius = iRFunctor.getIr();
+#if 1                                   // added accessors to support this
+    flux = iRFunctor.getSum();
+    fluxErr = iRFunctor.getSumR();
 #endif
 
     return boost::make_shared<KronPhotometry>(radius, flux, fluxErr);

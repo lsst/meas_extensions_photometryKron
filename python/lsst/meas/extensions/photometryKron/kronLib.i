@@ -33,3 +33,32 @@ Interface to Kron magnitudes
 
 %feature("autodoc", "1");
 %module(package="lsst.meas.extensions.photometryKron.kronLib", docstring=kronLib_DOCSTRING) kronLib
+
+%{
+#include "lsst/base.h"
+#include "lsst/afw/detection/Footprint.h"
+#include "lsst/afw/image/Utils.h"
+#include "lsst/afw/geom/Point.h"
+%}
+
+%include "lsst/p_lsstSwig.i"
+
+%include "lsst/base.h"
+%import "lsst/daf/data/dataLib.i"
+%import "lsst/afw/detection/Footprint.h"
+%import "lsst/afw/image/Utils.h"
+%import "lsst/afw/geom/Point.h"
+
+%inline %{
+namespace lsst {
+namespace meas {
+namespace algorithms {
+PTR(lsst::afw::detection::Footprint)
+ellipticalFootprint(lsst::afw::geom::Point2I const& center, //!< The center of the circle
+                    double a,                               //!< Major axis (pixels)
+                    double b,                               //!< Minor axis (pixels)
+                    double theta,                           //!< angle of major axis from x-axis; (radians)
+                    lsst::afw::image::BBox const& region    //!< Bounding box of MaskedImage footprint
+                   );
+}}}
+%}
