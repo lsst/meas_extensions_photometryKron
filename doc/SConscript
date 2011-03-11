@@ -1,0 +1,7 @@
+# -*- python -*-
+Import('env')
+
+doxy = env.Doxygen("htmlDir", "doxygen.conf")
+env.Ignore(doxy, Glob("../python/lsst/meas/extensions/photometryKron/*_wrap.cc"))
+env.Ignore(doxy, Glob("../python/lsst/meas/extensions/photometryKron/*Lib.py"))
+

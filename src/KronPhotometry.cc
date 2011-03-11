@@ -31,6 +31,7 @@ namespace algorithms {
 
 /**
  * @brief A class that knows how to calculate fluxes using the KRON photometry algorithm
+ *
  * @ingroup meas/algorithms
  */
 class KronPhotometry : public afwDetection::Photometry
@@ -289,8 +290,8 @@ afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exp
 
     MaskedImageT const& mimage = exposure->getMaskedImage();
     
-    double const xcen = peak->getFx() - mimage.getX0(); ///< object's column position in image pixel coords
-    double const ycen = peak->getFy() - mimage.getY0();  ///< object's row position
+    double const xcen = peak->getFx() - mimage.getX0(); // object's column position in image pixel coords
+    double const ycen = peak->getFy() - mimage.getY0();  // object's row position
     /*
      * Estimate the object's moments using the SDSS adaptive moments algorithm
      */

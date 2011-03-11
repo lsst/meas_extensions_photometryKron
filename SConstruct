@@ -15,8 +15,6 @@ pythonPkg = "kronLib"
 # this is where you put your fooLib.i file
 pythonPath = os.path.join("python", "lsst", "meas", "extensions", "photometryKron")
 
-
-
 ############################################################
 # You can probably leave everything below here alone.
 ############################################################
@@ -42,22 +40,22 @@ env.pythonPath = pythonPath
 # lib/SConscript          builds shared object
 # python/.../SConscript   does swigging and builds fooLib.py
 # tests/SConscript        builds and runs the tests
-for d in Split("lib tests examples "+pythonPath):
+for d in Split("doc lib tests examples "+pythonPath):
     SConscript(os.path.join(d, "SConscript"))
 
 scons.CleanTree(r"*~ core *.so *.os *.o *.pyc")
 
 Alias("install", [
-        #env.Install(env['prefix'], "doc"),
-        env.Install(env['prefix'], "etc"),
-        env.Install(env['prefix'], "examples"),
-        env.Install(env['prefix'], "include"),
-        env.Install(env['prefix'], "lib"),
-        env.Install(env['prefix'], "policy"),
-        env.Install(env['prefix'], "python"),
-        env.Install(env['prefix'], "src"),
-        env.Install(env['prefix'], "tests"),
-        env.InstallEups(os.path.join(env['prefix'], "ups")),
+    env.Install(env['prefix'], "doc"),
+    env.Install(env['prefix'], "etc"),
+    env.Install(env['prefix'], "examples"),
+    env.Install(env['prefix'], "include"),
+    env.Install(env['prefix'], "lib"),
+    env.Install(env['prefix'], "policy"),
+    env.Install(env['prefix'], "python"),
+    env.Install(env['prefix'], "src"),
+    env.Install(env['prefix'], "tests"),
+    env.InstallEups(os.path.join(env['prefix'], "ups")),
     ])
 
 env.Declare()
