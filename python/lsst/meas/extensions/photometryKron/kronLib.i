@@ -34,6 +34,9 @@ Interface to Kron magnitudes
 %feature("autodoc", "1");
 %module(package="lsst.meas.extensions.photometryKron.kronLib", docstring=kronLib_DOCSTRING) kronLib
 
+#define HAVE_ellipticalFootprint 1
+
+#if HAVE_ellipticalFootprint
 %{
 #include "lsst/base.h"
 #include "lsst/afw/detection/Footprint.h"
@@ -62,3 +65,4 @@ ellipticalFootprint(lsst::afw::geom::Point2I const& center, //!< The center of t
                    );
 }}}
 %}
+#endif

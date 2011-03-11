@@ -118,26 +118,28 @@ public:
                            _ab(ab),
                            _cosTheta(::cos(theta)),
                            _sinTheta(::sin(theta)),
-                           _sum(0.0), _sumR(0.0), _sumRVar(0), _x0(0), _y0(0) {}
+                           _sum(0.0), _sumR(0.0), _sumRVar(0),
+                           _imageX0(mimage.getX0()), _imageY0(mimage.getY0())
+        {}
     
     /// @brief Reset everything for a new Footprint
     void reset() {}        
     void reset(afwDetection::Footprint const& foot) {
         _sum = _sumR = _sumRVar = 0.0;
 
+        MaskedImageT const& mimage = this->getImage();
         afwImage::BBox const& bbox(foot.getBBox());
-        _x0 = bbox.getX0();
-        _y0 = bbox.getY0();
+        int const x0 = bbox.getX0(), y0 = bbox.getY0(), x1 = bbox.getX1(), y1 = bbox.getY1();
 
-#if 0
-        if (bbox.getDimensions() != _wimage->getDimensions()) {
-            throw LSST_EXCEPT(pexExceptions::LengthErrorException,
-                              (boost::format("Footprint at %d,%d -- %d,%d is wrong size "
-                                             "for %d x %d weight image") %
-                               bbox.getX0() % bbox.getY0() % bbox.getX1() % bbox.getY1() %
-                               _wimage->getWidth() % _wimage->getHeight()).str());
+        if (x0 < _imageX0 || y0 < _imageY0 ||
+            x1 >= _imageX0 + mimage.getWidth() || y1 >= _imageY0 + mimage.getHeight()) {
+            throw LSST_EXCEPT(lsst::pex::exceptions::OutOfRangeException,
+                              (boost::format("Footprint %d,%d--%d,%d doesn't fit in image %d,%d--%d,%d")
+                               % x0 % y0 % x1 % y1
+                               % _imageX0 % _imageY0
+                               % (_imageX0 + mimage.getWidth() - 1) % (_imageY0 + mimage.getHeight() - 1)
+                              ).str());
         }
-#endif
     }
     
     /// @brief method called for each pixel by apply()
@@ -147,8 +149,11 @@ public:
                    ) {
         typename MaskedImageT::Image::Pixel ival = iloc.image(0, 0);
         typename MaskedImageT::Variance::Pixel vval = iloc.variance(0, 0);
-        double const dx = x - _xcen;
-        double const dy = y - _ycen;
+
+        assert (x >= 0 && x < 200 && y >= 0 && y < 200);
+
+        double const dx = (x - _imageX0) - _xcen;
+        double const dy = (y - _imageY0) - _ycen;
         double const du =  dx*_cosTheta + dy*_sinTheta;
         double const dv = -dx*_sinTheta + dy*_cosTheta;
 
@@ -187,15 +192,20 @@ private:
     double _sum;                        // sum of I
     double _sumR;                       // sum of R*I
     double _sumRVar;                    // sum of R*R*Var(I)
-    int _x0, _y0;                       // the origin of the current Footprint
+    int const _imageX0, _imageY0;       // origin of image we're measuring
 };
 
 }
+/*
+ * Do we have the ellipticalFootprint function?  In sufficiently recent versions of afw it's available
+ * as a Footprint constructor;  when this is in a cut version this function should be deleted
+ */
+#define HAVE_ellipticalFootprint 1      // n.b. if == 0 you can clean up kronLib.i too
 
+#if HAVE_ellipticalFootprint
 /************************************************************************************************************/
 /**
- * Create an elliptical Footprint.  This should move to afw (probably as a Footprint ctor, in which
- * case it'll return an object, not a pointer)
+ * Create an elliptical Footprint.
  */
 PTR(afwDetection::Footprint)
 ellipticalFootprint(afwGeom::Point2I const& center, //!< The center of the circle
@@ -252,6 +262,7 @@ ellipticalFootprint(afwGeom::Point2I const& center, //!< The center of the circl
 
     return foot;
 }
+#endif
 
 /************************************************************************************************************/
 /**
@@ -295,13 +306,18 @@ afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exp
             Ixy = shape->find("SDSS")->getIxy();
             Iyy = shape->find("SDSS")->getIyy();
         } else {
-            throw LSST_EXCEPT(lsst::pex::exceptions::NotFoundException, "No Source");
+            throw LSST_EXCEPT(pexExceptions::NotFoundException, "Source is NULL");
         }
-    } catch (lsst::pex::exceptions::Exception& e) {
+    } catch (pexExceptions::Exception& e) {
         detail::SdssShapeImpl shapeImpl;
         
         if (!detail::getAdaptiveMoments(mimage, _background, xcen, ycen, _shiftmax, &shapeImpl)) {
-            LSST_EXCEPT_ADD(e, "Measuring KRON flux");
+            std::string const& msg = "Failed to estimate adaptive moments while measuring KRON flux";
+            if (source) {
+                LSST_EXCEPT_ADD(e, msg);
+            } else {
+                e = LSST_EXCEPT(lsst::pex::exceptions::NotFoundException, msg);
+            }
             throw e;
         }
         Ixx = shapeImpl.getIxx();
@@ -325,19 +341,33 @@ afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exp
     
     FootprintFindMoment<MaskedImageT, afwDetection::Psf::Image> iRFunctor(mimage, xcen, ycen, a/b, theta);
     // Build an elliptical Footprint of the proper size
-    afwGeom::Point2I center = afwGeom::makePointI(xcen + 0.5, ycen + 0.5); // the Footprint's centre
+    afwGeom::Point2I center = afwGeom::makePointI(peak->getFx() + 0.5, peak->getFy() + 0.5);
+#if HAVE_ellipticalFootprint
     PTR(afwDetection::Footprint) foot(ellipticalFootprint(center, a, b, theta));
                                  
     iRFunctor.apply(*foot);
+#else
+    afwDetection::Footprint foot(center, a, b, theta);
+                                 
+    iRFunctor.apply(foot);
+#endif
     radius = iRFunctor.getIr();
 
     double const r2 = _nRadiusForFlux*radius; // radius to measure within
 
-    std::pair<double, double> const fluxFluxErr =
-        photometry::calculateSincApertureFlux(exposure->getMaskedImage(), peak->getFx(), peak->getFy(),
-                                              0.0, r2, theta, 1 - b/a);
-    flux = fluxFluxErr.first;
-    fluxErr = fluxFluxErr.second;
+    try {
+        std::pair<double, double> const fluxFluxErr =
+            photometry::calculateSincApertureFlux(exposure->getMaskedImage(), peak->getFx(), peak->getFy(),
+                                                  0.0, r2, theta, 1 - b/a);
+        flux = fluxFluxErr.first;
+        fluxErr = fluxFluxErr.second;
+    } catch(pexExceptions::LengthErrorException &e) {
+        LSST_EXCEPT_ADD(e, (boost::format(
+                      "Measuring Kron flux for object at (%.3f, %.3f); aperture radius %g theta %g")
+                            % peak->getFx() % peak->getFy()
+                            % r2 % (theta*180/PI)).str());
+        throw e;
+    }
 
     return boost::make_shared<KronPhotometry>(radius, flux, fluxErr);
 }

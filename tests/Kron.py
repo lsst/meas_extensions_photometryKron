@@ -60,12 +60,13 @@ class KronPhotometryTestCase(unittest.TestCase):
         I0 = self.flux/(2*math.pi*a*b)
 
         gal = afwImage.ImageF(self.width, self.height)
+        gal.setXY0(10, 10)
 
         c, s = math.cos(math.radians(theta)), math.sin(math.radians(theta))
         I, Iuu, Ivv = 0.0, 0.0, 0.0
         for y in range(self.height):
             for x in range(self.width):
-                dx, dy = x - xcen, y - ycen
+                dx, dy = x + gal.getX0() - xcen, y + gal.getY0() - ycen
                 u =  c*dx + s*dy
                 v = -s*dx + c*dy
                 val = I0*math.exp(-0.5*((u/a)**2 + (v/b)**2))
@@ -81,32 +82,36 @@ class KronPhotometryTestCase(unittest.TestCase):
 
         objImg = afwImage.makeExposure(afwImage.makeMaskedImage(gal))
         objImg.getMaskedImage().getVariance().set(1.0)
-        del gal
-
-        kronValues = measureKron(objImg, xcen, ycen, nsigma, kfac)
 
         if display:
             frame = 0
             ds9.mtv(objImg, frame=frame, title="Elliptical")
 
-            ellip = Kron.ellipticalFootprint(afwGeom.makePointI(int(xcen), int(ycen)),
-                                             nsigma*a, nsigma*b, math.radians(theta),
-                                             afwImage.BBox())
+            args = [afwGeom.makePointI(int(xcen - gal.getX0()), int(ycen - gal.getY0())),
+                    nsigma*a, nsigma*b, math.radians(theta),
+                    afwImage.BBox(gal.getXY0(), gal.getWidth(), gal.getHeight())]
+
+            try:
+                ellip = afwDetection.Footprint(*args)
+            except AttributeError:
+                ellip = Kron.ellipticalFootprint(*args)
 
             displayUtils.drawFootprint(ellip, frame=frame)
-            ds9.dot("+", xcen, ycen, size=1, ctype=ds9.RED, frame=frame)
+            ds9.dot("+", xcen - gal.getX0(), ycen - gal.getY0(), size=1, ctype=ds9.RED, frame=frame)
             c, s = math.cos(math.radians(theta)), math.sin(math.radians(theta))
             ds9.dot("@:%f,%f,%f" % (nsigma**2*(a**2*c**2 + b**2*s**2),
                                     nsigma**2*(a**2 - b**2)*c*s,
                                     nsigma**2*(a**2*s**2 + b**2*c**2)),
-                    xcen, ycen, size=1, ctype=ds9.RED, frame=frame)
-
-        return kronValues
+                    xcen - gal.getX0(), ycen - gal.getY0(), size=1, ctype=ds9.RED, frame=frame)
+        #
+        # Do the measuring
+        #
+        return measureKron(objImg, xcen, ycen, nsigma, kfac)
 
     def measureKron(self, objImg, xcen, ycen, nsigma, kfac):
         """Measure Kron quantities using the C++ code"""
         #
-        # Now measure some annuli
+        # Now measure things
         #
         mp = measAlg.makeMeasurePhotometry(objImg)
         mp.addAlgorithm("KRON")
@@ -122,6 +127,7 @@ class KronPhotometryTestCase(unittest.TestCase):
         mp.configure(policy)
         peak = afwDetection.Peak(xcen, ycen)
         values = mp.measure(peak).find("KRON")
+
         R_K = values.getParameter()
         flux_K = values.getFlux()
         fluxErr_K = values.getFluxErr()
@@ -129,7 +135,10 @@ class KronPhotometryTestCase(unittest.TestCase):
         return R_K, flux_K, fluxErr_K
 
     def measureKronInPython(self, objImg, xcen, ycen, nsigma, kfac):
-        """Measure the Kron quantities of an elliptical Gaussian in python"""
+        """Measure the Kron quantities of an elliptical Gaussian in python
+
+        N.b. only works for XY0 == (0, 0)
+        """
         #
         # Measure moments using SDSS shape algorithm
         #
@@ -166,15 +175,22 @@ class KronPhotometryTestCase(unittest.TestCase):
         #
         # Get footprint
         #
-        ellip = Kron.ellipticalFootprint(afwGeom.makePointI(int(xcen), int(ycen)),
-                                         nsigma*a, nsigma*b, theta, afwImage.BBox())
+        args = [afwGeom.makePointI(int(xcen - objImg.getX0()), int(ycen - objImg.getY0())),
+                nsigma*a, nsigma*b, theta,
+                afwImage.BBox(objImg.getXY0(), objImg.getWidth(), objImg.getHeight())]
+
+        try:
+            ellip = afwDetection.Footprint(*args)
+        except AttributeError:
+            ellip = Kron.ellipticalFootprint(*args)
         
         sumI = 0.0
         sumR = 0.38259771140356325/ab*(1 + math.sqrt(2)*math.hypot(math.fmod(xcen, 1), math.fmod(ycen, 1)))*\
                objImg.getMaskedImage().getImage().get(int(xcen), int(ycen))
                
-        c, s = math.cos(theta), math.sin(theta)
+        gal = objImg.getMaskedImage().getImage()
 
+        c, s = math.cos(theta), math.sin(theta)
         for sp in ellip.getSpans():
             y, x0, x1 = sp.getY(), sp.getX0(), sp.getX1()
 
@@ -184,21 +200,33 @@ class KronPhotometryTestCase(unittest.TestCase):
                 v = -s*dx + c*dy
 
                 r = math.hypot(u, v*ab)
-                val = objImg.getMaskedImage().getImage().get(x, y)
+                try:
+                    val = gal.get(x, y)
+                except:
+                    continue
 
                 sumI += val
                 sumR += val*r
 
         R_K = sumR/sumI
 
-        return R_K, 0, 0
+        sumI = 0.0
+        for y in range(self.height):
+            for x in range(self.width):
+                dx, dy = x - xcen, y - ycen
+                u =  c*dx + s*dy
+                v = -s*dx + c*dy
+                if math.hypot(u/a, v/b) < kfac:
+                    sumI += gal.get(x, y)
+
+        return R_K, sumI, 0
 
     def testEllipticalGaussian(self):
         """Test measuring the Kron quantities of an elliptical Gaussian"""
         #
         # Choose function that does the measuring
         #
-        if False:                       # testing only
+        if False:                       # testing only; requires XY0 == (0, 0)
             measureKron = self.measureKronInPython
         else:
             measureKron = self.measureKron
@@ -209,17 +237,24 @@ class KronPhotometryTestCase(unittest.TestCase):
         kfac = 1.5
 
         ab_vals = (0.5, 1.0, 2.0, 3.0, 4.0, 5.0, )
-        #ab_vals = (1.0,)
         for dx in (0.0, 0.5,):
             for dy in (0.0, 0.5,):
+                if dx + dy != 0.0:
+                    continue
+                
                 for theta in (20.0, ):
                     for a in ab_vals:
                         for b in ab_vals:
                             if b > a:
                                 continue
 
-                            R_K, flux_K, fluxErr_K = self.makeAndMeasure(measureKron, a, b, theta,
-                                                                         dx=dx, dy=dy, kfac=kfac)
+                            try:
+                                R_K, flux_K, fluxErr_K = self.makeAndMeasure(measureKron, a, b, theta,
+                                                                             dx=dx, dy=dy, kfac=kfac)
+                            except Exception, e:
+                                print e
+                                continue
+                                
                             R_truth = math.sqrt(math.pi/2)
                             flux_truth = self.flux*(1 - math.exp(-0.5*(kfac*R_truth)**2))
                             R_truth = max(a,b)*R_truth
