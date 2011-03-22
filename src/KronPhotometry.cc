@@ -151,8 +151,6 @@ public:
         typename MaskedImageT::Image::Pixel ival = iloc.image(0, 0);
         typename MaskedImageT::Variance::Pixel vval = iloc.variance(0, 0);
 
-        assert (x >= 0 && x < 200 && y >= 0 && y < 200);
-
         double const dx = (x - _imageX0) - _xcen;
         double const dy = (y - _imageY0) - _ycen;
         double const du =  dx*_cosTheta + dy*_sinTheta;
