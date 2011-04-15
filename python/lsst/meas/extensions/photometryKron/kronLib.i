@@ -61,7 +61,7 @@ ellipticalFootprint(lsst::afw::geom::Point2I const& center, //!< The center of t
                     double a,                               //!< Major axis (pixels)
                     double b,                               //!< Minor axis (pixels)
                     double theta,                           //!< angle of major axis from x-axis; (radians)
-                    lsst::afw::image::BBox const& region    //!< Bounding box of MaskedImage footprint
+                    lsst::afw::geom::Box2I const& region    //!< Bounding box of MaskedImage footprint
                    );
 }}}
 %}

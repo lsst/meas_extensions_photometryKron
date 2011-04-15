@@ -129,8 +129,8 @@ public:
         _sum = _sumR = _sumRVar = 0.0;
 
         MaskedImageT const& mimage = this->getImage();
-        afwImage::BBox const& bbox(foot.getBBox());
-        int const x0 = bbox.getX0(), y0 = bbox.getY0(), x1 = bbox.getX1(), y1 = bbox.getY1();
+        afwGeom::Box2I const& bbox(foot.getBBox());
+        int const x0 = bbox.getMinX(), y0 = bbox.getMinY(), x1 = bbox.getMaxX(), y1 = bbox.getMaxY();
 
         if (x0 < _imageX0 || y0 < _imageY0 ||
             x1 >= _imageX0 + mimage.getWidth() || y1 >= _imageY0 + mimage.getHeight()) {
@@ -211,7 +211,7 @@ ellipticalFootprint(afwGeom::Point2I const& center, //!< The center of the circl
                     double a,                       //!< Major axis (pixels)
                     double b,                       //!< Minor axis (pixels)
                     double theta,                   //!< angle of major axis from x-axis; (radians)
-                    afwImage::BBox const& region=afwImage::BBox() //!< Bounding box of MaskedImage footprint
+                    afwGeom::Box2I const& region=afwGeom::Box2I() //!< Bounding box of MaskedImage footprint
                    )
 {
     PTR(afwDetection::Footprint) foot(new afwDetection::Footprint);
@@ -340,7 +340,7 @@ afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exp
     
     FootprintFindMoment<MaskedImageT, afwDetection::Psf::Image> iRFunctor(mimage, xcen, ycen, a/b, theta);
     // Build an elliptical Footprint of the proper size
-    afwGeom::Point2I center = afwGeom::makePointI(peak->getFx() + 0.5, peak->getFy() + 0.5);
+    afwGeom::Point2I center(peak->getFx() + 0.5, peak->getFy() + 0.5);
 #if HAVE_ellipticalFootprint
     PTR(afwDetection::Footprint) foot(ellipticalFootprint(center, a, b, theta));
                                  
