@@ -56,7 +56,6 @@ public:
     /// Add desired fields to the schema
     virtual void defineSchema(afwDetection::Schema::Ptr schema ///< our schema; == _mySchema
                      ) {
-        Photometry::defineSchema(schema);
         schema->add(afwDetection::SchemaEntry("radius", RADIUS, afwDetection::Schema::DOUBLE, 1, "pixels"));
     }
 
