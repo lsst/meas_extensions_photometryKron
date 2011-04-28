@@ -118,14 +118,20 @@ public:
                            _ab(ab),
                            _cosTheta(::cos(theta)),
                            _sinTheta(::sin(theta)),
-                           _sum(0.0), _sumR(0.0), _sumRVar(0),
+                           _sum(0.0), _sumR(0.0), 
+#if 0
+                           _sumVar(0.0), _sumRVar(0.0),
+#endif
                            _imageX0(mimage.getX0()), _imageY0(mimage.getY0())
         {}
     
     /// @brief Reset everything for a new Footprint
     void reset() {}        
     void reset(afwDetection::Footprint const& foot) {
-        _sum = _sumR = _sumRVar = 0.0;
+        _sum = _sumR = 0.0;
+#if 0
+        _sumVar = _sumRVar = 0.0;
+#endif
 
         MaskedImageT const& mimage = this->getImage();
         afwGeom::Box2I const& bbox(foot.getBBox());
@@ -147,9 +153,6 @@ public:
                     int x,                                  ///< column-position of pixel
                     int y                                   ///< row-position of pixel
                    ) {
-        typename MaskedImageT::Image::Pixel ival = iloc.image(0, 0);
-        typename MaskedImageT::Variance::Pixel vval = iloc.variance(0, 0);
-
         double const dx = (x - _imageX0) - _xcen;
         double const dy = (y - _imageY0) - _ycen;
         double const du =  dx*_cosTheta + dy*_sinTheta;
@@ -171,16 +174,27 @@ public:
         }
 #endif
 
+        typename MaskedImageT::Image::Pixel ival = iloc.image(0, 0);
         _sum += ival;
         _sumR += r*ival;
+#if 0
+        typename MaskedImageT::Variance::Pixel vval = iloc.variance(0, 0);
+        _sumVar += vval;
         _sumRVar += r*r*vval;
+#endif
     }
 
     /// Return the Footprint's <r>
     double getIr() const { return _sumR/_sum; }
 
+#if 0
     /// Return the variance of the Footprint's <r>
-    double getIrVar() const { return _sumRVar/_sum - getIr()*getIr(); }
+//    double getIrVar() const { return _sumRVar/_sum - getIr()*getIr(); } // Wrong?
+    double getIrVar() const { return _sumRVar/(_sum*_sum) + _sumVar*_sumR*_sumR/::pow(_sum, 4); }
+#endif
+
+    /// Return whether the measurement might be trusted
+    bool getGood() const { return _sum > 0 && _sumR > 0; }
 
 private:
     double const _xcen;                 // center of object
@@ -189,8 +203,12 @@ private:
     double const _cosTheta, _sinTheta;  // {cos,sin}(angle from x-axis)
     double _sum;                        // sum of I
     double _sumR;                       // sum of R*I
+#if 0
+    double _sumVar;                     // sum of Var(I)
     double _sumRVar;                    // sum of R*R*Var(I)
+#endif
     int const _imageX0, _imageY0;       // origin of image we're measuring
+
 };
 
 }
@@ -295,6 +313,7 @@ afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exp
     double Ixx = std::numeric_limits<double>::quiet_NaN(); // <xx>
     double Ixy = std::numeric_limits<double>::quiet_NaN(); // <xy>
     double Iyy = std::numeric_limits<double>::quiet_NaN(); // <yy>
+    short flags = 0;                    // Status flags
     try {
         if (source) {
             CONST_PTR(lsst::afw::detection::Measurement<lsst::afw::detection::Shape>)
@@ -303,6 +322,7 @@ afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exp
             Ixx = shape->find("SDSS")->getIxx();
             Ixy = shape->find("SDSS")->getIxy();
             Iyy = shape->find("SDSS")->getIyy();
+            flags = shape->find("SDSS")->getShapeStatus();
         } else {
             throw LSST_EXCEPT(pexExceptions::NotFoundException, "Source is NULL");
         }
@@ -321,7 +341,13 @@ afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exp
         Ixx = shapeImpl.getIxx();
         Ixy = shapeImpl.getIxy();
         Iyy = shapeImpl.getIyy();
+        flags = shapeImpl.getFlags();
     }
+    if (flags & (Flags::SHAPE_MAXITER | Flags::SHAPE_UNWEIGHTED | Flags::SHAPE_UNWEIGHTED_BAD)) {
+        // Don't trust the adaptive moment: they could make us take forever measuring a very large aperture
+        return boost::make_shared<KronPhotometry>(radius, flux, fluxErr);
+    }
+
     /*
      * The shape is an ellipse that's axis-aligned in (u, v) [<uv> = 0] after rotation by theta:
      * <x^2> + <y^2> = <u^2> + <v^2>
@@ -342,14 +368,18 @@ afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exp
     afwGeom::Point2I center(peak->getFx() + 0.5, peak->getFy() + 0.5);
 #if HAVE_ellipticalFootprint
     PTR(afwDetection::Footprint) foot(ellipticalFootprint(center, a, b, theta));
-                                 
+
     iRFunctor.apply(*foot);
 #else
     afwDetection::Footprint foot(center, a, b, theta);
-                                 
+
     iRFunctor.apply(foot);
 #endif
     radius = iRFunctor.getIr();
+
+    if (!iRFunctor.getGood()) {
+        return boost::make_shared<KronPhotometry>(radius, flux, fluxErr);
+    }
 
     double const r2 = _nRadiusForFlux*radius; // radius to measure within
 
@@ -360,8 +390,8 @@ afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exp
         flux = fluxFluxErr.first;
         fluxErr = fluxFluxErr.second;
     } catch(pexExceptions::LengthErrorException &e) {
-        LSST_EXCEPT_ADD(e, (boost::format(
-                      "Measuring Kron flux for object at (%.3f, %.3f); aperture radius %g theta %g")
+        LSST_EXCEPT_ADD(e, (boost::format("Measuring Kron flux for object at (%.3f, %.3f);"
+                                          " aperture radius %g theta %g")
                             % peak->getFx() % peak->getFy()
                             % r2 % (theta*180/PI)).str());
         throw e;
