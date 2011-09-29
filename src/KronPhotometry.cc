@@ -12,12 +12,14 @@
 
 #include "lsst/afw/detection/Psf.h"
 #include "lsst/afw/detection/Photometry.h"
-#include "lsst/meas/algorithms/detail/SdssShape.h"
+#include "lsst/afw/detection/AperturePhotometry.h"
+
 #include "lsst/meas/algorithms/Photometry.h"
+#include "lsst/meas/algorithms/detail/SdssShape.h"
 
 namespace pexExceptions = lsst::pex::exceptions;
 namespace pexLogging = lsst::pex::logging;
-namespace afwDetection = lsst::afw::detection;
+namespace afwDet = lsst::afw::detection;
 namespace afwGeom = lsst::afw::geom;
 namespace afwImage = lsst::afw::image;
 namespace afwMath = lsst::afw::math;
@@ -34,37 +36,28 @@ namespace algorithms {
  *
  * @ingroup meas/algorithms
  */
-class KronPhotometry : public afwDetection::Photometry
+template<typename ExposureT>
+class KronPhotometer : public Algorithm<afwDet::Photometry, ExposureT>
 {
-    enum { RADIUS = Photometry::NVALUE,
-           NVALUE = RADIUS + 1 };
-
 public:
-    typedef boost::shared_ptr<KronPhotometry> Ptr;
-    typedef boost::shared_ptr<KronPhotometry const> ConstPtr;
+    typedef Algorithm<afwDet::Photometry, ExposureT> AlgorithmT;
+    typedef boost::shared_ptr<KronPhotometer> Ptr;
+    typedef boost::shared_ptr<KronPhotometer const> ConstPtr;
 
     /// Ctor
-    KronPhotometry(double radius, double flux, double fluxErr=std::numeric_limits<double>::quiet_NaN()) :
-        afwDetection::Photometry() {
-        init();                         // This allocates space for everything in the schema
+    KronPhotometer(double nSigmaForRadius=6.0, double nRadiusForFlux=2.0, 
+                   double background=0.0, double shiftmax=10.0) :
+        AlgorithmT(), _nSigmaForRadius(nSigmaForRadius),
+        _nRadiusForFlux(nRadiusForFlux), _background(background), _shiftmax(shiftmax) {}
 
-        set<FLUX>(flux);
-        set<FLUX_ERR>(fluxErr);
-        set<RADIUS>(radius);
+    virtual std::string getName() const { return "KRON"; }
+
+    virtual PTR(AlgorithmT) clone() const {
+        return boost::make_shared<KronPhotometer<ExposureT> >(_nSigmaForRadius, _nRadiusForFlux,
+                                                              _background, _shiftmax);
     }
 
-    /// Add desired fields to the schema
-    virtual void defineSchema(afwDetection::Schema::Ptr schema ///< our schema; == _mySchema
-                     ) {
-        schema->add(afwDetection::SchemaEntry("radius", RADIUS, afwDetection::Schema::DOUBLE, 1, "pixels"));
-    }
-
-    double getParameter(int) const {
-        return get<RADIUS, double>();
-    }
-
-    static bool doConfigure(lsst::pex::policy::Policy const& policy)
-    {
+    virtual void configure(pexPolicy::Policy const& policy) {
         if (policy.isDouble("nSigmaForRadius")) {
             _nSigmaForRadius = policy.getDouble("nSigmaForRadius");
         }
@@ -73,47 +66,38 @@ public:
         }
         if (policy.isDouble("background")) {
             _background = policy.getDouble("background");
-        } 
+        }
         if (policy.isDouble("shiftmax")) {
             _shiftmax = policy.getDouble("shiftmax");
-        } 
-        
-        return true;
+        }
     }
-    template<typename ImageT>
-    static Photometry::Ptr doMeasure(CONST_PTR(ImageT),
-                                     CONST_PTR(afwDetection::Peak),
-                                     CONST_PTR(afwDetection::Source)
-                                    );
+
+    virtual PTR(afwDet::Photometry) measureNull(void) const {
+        double const NaN = std::numeric_limits<double>::quiet_NaN();
+        return boost::make_shared<afwDet::AperturePhotometry>(NaN, NaN, NaN);
+    }
+
+    virtual PTR(afwDet::Photometry) measureOne(ExposurePatch<ExposureT> const& patch,
+                                               afwDet::Source const& source) const;
 
 private:
-    static double _nSigmaForRadius;
-    static double _nRadiusForFlux;
-    static double _background;
-    static double _shiftmax;
-
-    KronPhotometry(void) : afwDetection::Photometry() { }
-    LSST_SERIALIZE_PARENT(afwDetection::Photometry)
+    double _nSigmaForRadius;
+    double _nRadiusForFlux;
+    double _background;
+    double _shiftmax;
 };
-
-LSST_REGISTER_SERIALIZER(KronPhotometry)
-
-double KronPhotometry::_nSigmaForRadius = 6.0; // Size of aperture (in sigma) to estimate Kron radius
-double KronPhotometry::_nRadiusForFlux = 2.0;  // number of R_Kron to measure flux in
-double KronPhotometry::_background = 0.0;      // the frame's background level
-double KronPhotometry::_shiftmax = 10;         // Max allowed centroid shift
 
 /************************************************************************************************************/
 
 namespace {
 template <typename MaskedImageT, typename WeightImageT>
-class FootprintFindMoment : public afwDetection::FootprintFunctor<MaskedImageT> {
+class FootprintFindMoment : public afwDet::FootprintFunctor<MaskedImageT> {
 public:
     FootprintFindMoment(MaskedImageT const& mimage, ///< The image the source lives in
                         double const xcen, double const ycen, // center of the object
                         double const ab,                      // axis ratio
                         double const theta                    // rotation of ellipse +ve from x axis
-                       ) : afwDetection::FootprintFunctor<MaskedImageT>(mimage),
+                       ) : afwDet::FootprintFunctor<MaskedImageT>(mimage),
                            _xcen(xcen), _ycen(ycen),
                            _ab(ab),
                            _cosTheta(::cos(theta)),
@@ -127,7 +111,7 @@ public:
     
     /// @brief Reset everything for a new Footprint
     void reset() {}        
-    void reset(afwDetection::Footprint const& foot) {
+    void reset(afwDet::Footprint const& foot) {
         _sum = _sumR = 0.0;
 #if 0
         _sumVar = _sumRVar = 0.0;
@@ -223,7 +207,7 @@ private:
 /**
  * Create an elliptical Footprint.
  */
-PTR(afwDetection::Footprint)
+PTR(afwDet::Footprint)
 ellipticalFootprint(afwGeom::Point2I const& center, //!< The center of the circle
                     double a,                       //!< Major axis (pixels)
                     double b,                       //!< Minor axis (pixels)
@@ -231,7 +215,7 @@ ellipticalFootprint(afwGeom::Point2I const& center, //!< The center of the circl
                     afwGeom::Box2I const& region=afwGeom::Box2I() //!< Bounding box of MaskedImage footprint
                    )
 {
-    PTR(afwDetection::Footprint) foot(new afwDetection::Footprint);
+    PTR(afwDet::Footprint) foot(new afwDet::Footprint);
     foot->setRegion(region);
     
     int const xc = center[0];           // x-centre
@@ -285,24 +269,18 @@ ellipticalFootprint(afwGeom::Point2I const& center, //!< The center of the circl
  * Calculate the desired Kron radius and flux
  */
 template<typename ExposureT>
-afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exposure,
-                                                        CONST_PTR(afwDetection::Peak) peak,
-                                                        CONST_PTR(afwDetection::Source) source
-                                                       )
+PTR(afwDet::Photometry) KronPhotometer<ExposureT>::measureOne(ExposurePatch<ExposureT> const& patch,
+                                                              afwDet::Source const& source) const
 {
-    double radius = std::numeric_limits<double>::quiet_NaN();
-    double flux = std::numeric_limits<double>::quiet_NaN();
-    double fluxErr = std::numeric_limits<double>::quiet_NaN();
-
-    if (!peak) {
-        return boost::make_shared<KronPhotometry>(radius, flux, fluxErr);
-    }
+    double const NaN = std::numeric_limits<double>::quiet_NaN();
 
     typedef typename ExposureT::MaskedImageT MaskedImageT;
     typedef typename MaskedImageT::Image Image;
     typedef typename Image::Pixel Pixel;
     typedef typename Image::Ptr ImagePtr;
 
+    CONST_PTR(ExposureT) exposure = patch.getExposure();
+    CONST_PTR(afwDet::Peak) peak = patch.getPeak();
     MaskedImageT const& mimage = exposure->getMaskedImage();
     
     double const xcen = peak->getFx() - mimage.getX0(); // object's column position in image pixel coords
@@ -310,32 +288,23 @@ afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exp
     /*
      * Estimate the object's moments using the SDSS adaptive moments algorithm
      */
-    double Ixx = std::numeric_limits<double>::quiet_NaN(); // <xx>
-    double Ixy = std::numeric_limits<double>::quiet_NaN(); // <xy>
-    double Iyy = std::numeric_limits<double>::quiet_NaN(); // <yy>
+    double Ixx = NaN; // <xx>
+    double Ixy = NaN; // <xy>
+    double Iyy = NaN; // <yy>
     short flags = 0;                    // Status flags
     try {
-        if (source) {
-            CONST_PTR(lsst::afw::detection::Measurement<lsst::afw::detection::Shape>)
-                shape = source->getShape();
+        CONST_PTR(afwDet::Measurement<afwDet::Shape>) shape = source.getShape();
             
-            Ixx = shape->find("SDSS")->getIxx();
-            Ixy = shape->find("SDSS")->getIxy();
-            Iyy = shape->find("SDSS")->getIyy();
-            flags = shape->find("SDSS")->getShapeStatus();
-        } else {
-            throw LSST_EXCEPT(pexExceptions::NotFoundException, "Source is NULL");
-        }
+        Ixx = shape->find("SDSS")->getIxx();
+        Ixy = shape->find("SDSS")->getIxy();
+        Iyy = shape->find("SDSS")->getIyy();
+        flags = shape->find("SDSS")->getShapeStatus();
     } catch (pexExceptions::Exception& e) {
         detail::SdssShapeImpl shapeImpl;
         
         if (!detail::getAdaptiveMoments(mimage, _background, xcen, ycen, _shiftmax, &shapeImpl)) {
             std::string const& msg = "Failed to estimate adaptive moments while measuring KRON flux";
-            if (source) {
-                LSST_EXCEPT_ADD(e, msg);
-            } else {
-                e = LSST_EXCEPT(lsst::pex::exceptions::NotFoundException, msg);
-            }
+            LSST_EXCEPT_ADD(e, msg);
             throw e;
         }
         Ixx = shapeImpl.getIxx();
@@ -345,7 +314,7 @@ afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exp
     }
     if (flags & (Flags::SHAPE_MAXITER | Flags::SHAPE_UNWEIGHTED | Flags::SHAPE_UNWEIGHTED_BAD)) {
         // Don't trust the adaptive moment: they could make us take forever measuring a very large aperture
-        return boost::make_shared<KronPhotometry>(radius, flux, fluxErr);
+        return boost::make_shared<afwDet::AperturePhotometry>(NaN, NaN, NaN);
     }
 
     /*
@@ -363,26 +332,27 @@ afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exp
     double const a = _nSigmaForRadius*::sqrt(Iuu);
     double const b = _nSigmaForRadius*::sqrt(Ivv);
     
-    FootprintFindMoment<MaskedImageT, afwDetection::Psf::Image> iRFunctor(mimage, xcen, ycen, a/b, theta);
+    FootprintFindMoment<MaskedImageT, afwDet::Psf::Image> iRFunctor(mimage, xcen, ycen, a/b, theta);
     // Build an elliptical Footprint of the proper size
     afwGeom::Point2I center(peak->getFx() + 0.5, peak->getFy() + 0.5);
 #if HAVE_ellipticalFootprint
-    PTR(afwDetection::Footprint) foot(ellipticalFootprint(center, a, b, theta));
+    PTR(afwDet::Footprint) foot(ellipticalFootprint(center, a, b, theta));
 
     iRFunctor.apply(*foot);
 #else
-    afwDetection::Footprint foot(center, a, b, theta);
+    afwDet::Footprint foot(center, a, b, theta);
 
     iRFunctor.apply(foot);
 #endif
-    radius = iRFunctor.getIr();
+    double const radius = iRFunctor.getIr();
 
     if (!iRFunctor.getGood()) {
-        return boost::make_shared<KronPhotometry>(radius, flux, fluxErr);
+        return boost::make_shared<afwDet::AperturePhotometry>(NaN, NaN, radius);
     }
 
     double const r2 = _nRadiusForFlux*radius; // radius to measure within
 
+    double flux = NaN, fluxErr = NaN;
     try {
         std::pair<double, double> const fluxFluxErr =
             photometry::calculateSincApertureFlux(exposure->getMaskedImage(), peak->getFx(), peak->getFy(),
@@ -397,29 +367,10 @@ afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exp
         throw e;
     }
 
-    return boost::make_shared<KronPhotometry>(radius, flux, fluxErr);
+    return boost::make_shared<afwDet::AperturePhotometry>(flux, fluxErr, radius);
 }
 
-/*
- * Declare the existence of a "KRON" algorithm to MeasurePhotometry
- *
- * \cond
- */
-#define MAKE_PHOTOMETRYS(TYPE)                                          \
-    MeasurePhotometry<afwImage::Exposure<TYPE> >::declare("KRON", \
-        &KronPhotometry::doMeasure<afwImage::Exposure<TYPE> >, \
-        &KronPhotometry::doConfigure \
-    )
-
-namespace {
-    volatile bool isInstance[] = {
-        MAKE_PHOTOMETRYS(float)
-#if 0
-        ,MAKE_PHOTOMETRYS(double)
-#endif
-    };
-}
-    
-// \endcond
+/// Declare the existence of a "KRON" algorithm to MeasurePhotometry
+LSST_DECLARE_ALGORITHM(KronPhotometer, afwDet::Photometry);
 
 }}}
