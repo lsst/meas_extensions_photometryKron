@@ -6,6 +6,7 @@
 #include "lsst/pex/exceptions.h"
 #include "lsst/pex/logging/Trace.h"
 #include "lsst/afw/geom/Point.h"
+#include "lsst/afw/geom/Angle.h"
 #include "lsst/afw/image.h"
 #include "lsst/afw/math/Integrate.h"
 #include "lsst/meas/algorithms/Measure.h"
@@ -21,9 +22,6 @@ namespace afwDetection = lsst::afw::detection;
 namespace afwGeom = lsst::afw::geom;
 namespace afwImage = lsst::afw::image;
 namespace afwMath = lsst::afw::math;
-
-double const PI = boost::math::constants::pi<double>();          // ~ 355/113.0
-double const ROOT2 = boost::math::constants::root_two<double>(); // sqrt(2)
 
 namespace lsst {
 namespace meas {
@@ -170,7 +168,7 @@ public:
              */
             
             double const eR = 0.38259771140356325; // <r> for a single square pixel, about the centre
-            r = (eR/_ab)*(1 + ROOT2*::hypot(::fmod(du, 1), ::fmod(dv, 1)));
+            r = (eR/_ab)*(1 + afwGeom::ROOT2*::hypot(::fmod(du, 1), ::fmod(dv, 1)));
         }
 #endif
 
@@ -393,7 +391,7 @@ afwDetection::Photometry::Ptr KronPhotometry::doMeasure(CONST_PTR(ExposureT) exp
         LSST_EXCEPT_ADD(e, (boost::format("Measuring Kron flux for object at (%.3f, %.3f);"
                                           " aperture radius %g theta %g")
                             % peak->getFx() % peak->getFy()
-                            % r2 % (theta*180/PI)).str());
+                            % r2 % (afwGeom::radToDeg(theta))).str());
         throw e;
     }
 
