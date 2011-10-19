@@ -7,6 +7,7 @@
 #include "lsst/pex/logging/Trace.h"
 #include "lsst/afw/geom/Point.h"
 #include "lsst/afw/geom/Box.h"
+#include "lsst/afw/geom/Angle.h"
 #include "lsst/afw/image.h"
 #include "lsst/afw/math/Integrate.h"
 #include "lsst/meas/algorithms/Measure.h"
@@ -36,10 +37,6 @@ namespace afwCoord = lsst::afw::coord;
  * as a Footprint constructor;  when this is in a cut version this function should be deleted
  */
 #define HAVE_ellipticalFootprint 1      // n.b. if == 0 you can clean up kronLib.i too
-
-
-double const PI = boost::math::constants::pi<double>();          // ~ 355/113.0
-double const ROOT2 = boost::math::constants::root_two<double>(); // sqrt(2)
 
 namespace lsst {
 namespace meas {
@@ -236,7 +233,7 @@ public:
              */
             
             double const eR = 0.38259771140356325; // <r> for a single square pixel, about the centre
-            r = (eR/_ab)*(1 + ROOT2*::hypot(::fmod(du, 1), ::fmod(dv, 1)));
+            r = (eR/_ab)*(1 + afwGeom::ROOT2*::hypot(::fmod(du, 1), ::fmod(dv, 1)));
         }
 #endif
 
@@ -410,7 +407,7 @@ std::pair<double, double> KronAperture::measure(ImageT const& image, // Image of
         LSST_EXCEPT_ADD(e, (boost::format("Measuring Kron flux for object at (%.3f, %.3f);"
                                           " aperture radius %g,%g theta %g")
                             % _x % _y % _ellipse.getA() % _ellipse.getB() %
-                            (_ellipse.getTheta()*180/PI)).str());
+                            afwGeom::radToDeg(_ellipse.getTheta())).str());
         throw e;
     }
 }
