@@ -56,9 +56,9 @@ public:
     typedef boost::shared_ptr<KronPhotometer const> ConstPtr;
 
     /// Ctor
-    KronPhotometer(double nSigmaForRadius=6.0, double nRadiusForFlux=2.0, 
+    KronPhotometer(bool fixed=false, double nSigmaForRadius=6.0, double nRadiusForFlux=2.0, 
                    double background=0.0, double shiftmax=10.0) :
-        AlgorithmT(), _nSigmaForRadius(nSigmaForRadius),
+        AlgorithmT(), _fixed(fixed), _nSigmaForRadius(nSigmaForRadius),
         _nRadiusForFlux(nRadiusForFlux), _background(background), _shiftmax(shiftmax) {}
 
     virtual std::string getName() const { return "KRON"; }
@@ -69,6 +69,9 @@ public:
     }
 
     virtual void configure(pexPolicy::Policy const& policy) {
+        if (policy.isBool("fixed")) {
+            _fixed = policy.getBool("fixed");
+        }
         if (policy.isDouble("nSigmaForRadius")) {
             _nSigmaForRadius = policy.getDouble("nSigmaForRadius");
         }
@@ -88,13 +91,11 @@ public:
         return boost::make_shared<afwDet::AperturePhotometry>(NaN, NaN, NaN);
     }
 
-    virtual PTR(afwDet::Photometry) measureOne(ExposurePatch<ExposureT> const& patch,
-                                               afwDet::Source const& source) const;
-
-    virtual PTR(afwDet::Photometry) measureGroups(std::vector<PTR(ExposureGroup<ExposureT>)> const&,
-                                                  afwDet::Source const&) const;
+    virtual PTR(afwDet::Photometry) measureSingle(afwDet::Source const&, afwDet::Source const&,
+                                                  ExposurePatch<ExposureT> const&) const;
 
 private:
+    bool _fixed;
     double _nSigmaForRadius;
     double _nRadiusForFlux;
     double _background;
@@ -421,17 +422,19 @@ std::pair<double, double> KronAperture::measure(ImageT const& image, // Image of
  * Calculate the desired Kron radius and flux
  */
 template<typename ExposureT>
-PTR(afwDet::Photometry) KronPhotometer<ExposureT>::measureOne(ExposurePatch<ExposureT> const& patch,
-                                                              afwDet::Source const& source) const
+PTR(afwDet::Photometry) KronPhotometer<ExposureT>::measureSingle(
+    afwDet::Source const& target,
+    afwDet::Source const& source,
+    ExposurePatch<ExposureT> const& patch
+    ) const
 {
     typedef typename ExposureT::MaskedImageT MaskedImageT;
 
     CONST_PTR(ExposureT) exposure = patch.getExposure();
-    CONST_PTR(afwDet::Peak) peak = patch.getPeak();
     MaskedImageT const& mimage = exposure->getMaskedImage();
     
-    double const xcen = peak->getFx() - mimage.getX0(); // object's column position in image pixel coords
-    double const ycen = peak->getFy() - mimage.getY0();  // object's row position
+    double const xcen = patch.getCenter().getX() - mimage.getX0(); // column position in image pixel coords
+    double const ycen = patch.getCenter().getY() - mimage.getY0();  // row position
 
     CONST_PTR(KronAperture) aperture = KronAperture::determine(mimage, source, xcen, ycen, _nSigmaForRadius, 
                                                                _background, _shiftmax);
@@ -440,61 +443,6 @@ PTR(afwDet::Photometry) KronPhotometer<ExposureT>::measureOne(ExposurePatch<Expo
     double const fluxErr = result.second;
     double const radius = aperture->getEllipse().getA();
     return boost::make_shared<afwDet::AperturePhotometry>(flux, fluxErr, radius);
-}
-
-
-template<typename ExposureT>
-PTR(afwDet::Photometry) KronPhotometer<ExposureT>::measureGroups(
-    std::vector<PTR(ExposureGroup<ExposureT>)> const& groups,
-    afwDet::Source const& source
-    ) const
-{
-    typedef std::vector<PTR(ExposureGroup<ExposureT>)> GroupSetT;
-
-    PTR(afwDet::Photometry) meas = boost::make_shared<afwDet::Photometry>(); // Root node of measurements
-    CONST_PTR(KronAperture) masterAperture; // Master aperture for measuring fluxes; from the first image
-    afwGeom::AffineTransform masterTransform; // Linear WCS for master image
-    afwCoord::Coord::Ptr masterCoord; // Sky coordinates of source
-    for (typename GroupSetT::const_iterator iter = groups.begin(); iter != groups.end(); ++iter) {
-        CONST_PTR(ExposureGroup<ExposureT>) group = *iter;
-        if (group->size() != 1) {
-            throw LSST_EXCEPT(lsst::pex::exceptions::RuntimeErrorException,
-                              "Can currently only handle one image per group");
-        }
-        
-        CONST_PTR(ExposurePatch<ExposureT>) patch = (*group)[0];
-        CONST_PTR(ExposureT) exposure = patch->getExposure();
-        CONST_PTR(afwDet::Peak) peak = patch->getPeak();
-        CONST_PTR(afwImage::Wcs) wcs = exposure->getWcs();
-        typename ExposureT::MaskedImageT const& mimage = exposure->getMaskedImage();
-
-        double const xcen = peak->getFx() - mimage.getX0(); ///< object's column position in image pixel coords
-        double const ycen = peak->getFy() - mimage.getY0();  ///< object's row position
-
-        std::pair<double, double> phot;
-        CONST_PTR(KronAperture) aperture;
-        if (iter == groups.begin()) {
-            masterAperture = aperture = KronAperture::determine(mimage, source, xcen, ycen, _nSigmaForRadius,
-                                                                _background, _shiftmax);
-            phot = aperture->measure(mimage, _nRadiusForFlux);
-            masterCoord = wcs->pixelToSky(afwGeom::Point2D(xcen, ycen));
-            masterTransform = wcs->linearizePixelToSky(masterCoord);
-        } else {
-            afwGeom::AffineTransform const& transform = 
-                masterTransform * wcs->linearizeSkyToPixel(masterCoord);
-            aperture = masterAperture->transform(transform);
-            phot = aperture->measure(mimage, _nRadiusForFlux);
-        }
-
-        // XXX Aperture correction???
-
-        double const flux = phot.first;
-        double const fluxErr = phot.second;
-        double const radius = aperture->getEllipse().getA();
-        meas->add(boost::make_shared<afwDet::AperturePhotometry>(flux, fluxErr, radius));
-    }
-
-    return meas;
 }
 
 
