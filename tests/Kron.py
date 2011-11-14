@@ -156,7 +156,7 @@ class KronPhotometryTestCase(unittest.TestCase):
 
         peak = afwDetection.Peak(xcen, ycen)
 
-        values = ms.measure(peak).find("SDSS")
+        values = ms.measure(objImg, peak).find("SDSS")
         Mxx = values.getIxx()
         Mxy = values.getIxy()
         Myy = values.getIyy()
