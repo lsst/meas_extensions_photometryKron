@@ -1,0 +1,28 @@
+
+# /
+/.sconsign.dblite
+/config.log
+/.sconf_temp
+
+# /doc/
+/doc/htmlDir
+
+# /lib/
+/lib/*.so
+
+# /python/lsst/meas/extensions/
+/python/lsst/meas/extensions/*.pyc
+
+# /python/lsst/meas/extensions/photometryKron/
+/python/lsst/meas/extensions/photometryKron/*.dylib
+/python/lsst/meas/extensions/photometryKron/*.so
+/python/lsst/meas/extensions/photometryKron/kronLib.py*
+/python/lsst/meas/extensions/photometryKron/kronLib_wrap*
+/python/lsst/meas/extensions/photometryKron/*.pyc
+
+# /src/
+/src/*.os
+
+# /tests/
+/tests/.tests
+/tests/*.pyc
