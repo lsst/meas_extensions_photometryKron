@@ -1,28 +1,17 @@
-
-# /
-/.sconsign.dblite
-/config.log
-/.sconf_temp
-
-# /doc/
-/doc/htmlDir
-
-# /lib/
-/lib/*.so
-
-# /python/lsst/meas/extensions/
-/python/lsst/meas/extensions/*.pyc
-
-# /python/lsst/meas/extensions/photometryKron/
-/python/lsst/meas/extensions/photometryKron/*.dylib
-/python/lsst/meas/extensions/photometryKron/*.so
-/python/lsst/meas/extensions/photometryKron/kronLib.py*
-/python/lsst/meas/extensions/photometryKron/kronLib_wrap*
-/python/lsst/meas/extensions/photometryKron/*.pyc
-
-# /src/
-/src/*.os
-
-# /tests/
-/tests/.tests
-/tests/*.pyc
+*.dylib
+*.o
+*.os
+*.pyc
+*.so
+.sconf_temp
+.sconsign.dblite
+config.log
+.sconsign.dblite
+config.log
+.sconf_temp
+doc/htmlDir
+python/lsst/meas/extensions/photometryKron/kronLib.py
+python/lsst/meas/extensions/photometryKron/kronLib_wrap*
+tests/.tests
+ups/*.cfgc
+python/lsst/meas/extensions/photometryKron/version.py
