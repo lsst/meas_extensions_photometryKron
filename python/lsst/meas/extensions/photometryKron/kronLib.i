@@ -47,7 +47,6 @@ Interface to Kron magnitudes
 %include "lsst/p_lsstSwig.i"
 
 %include "lsst/base.h"
-%import "lsst/daf/data/dataLib.i"
 %import "lsst/afw/detection/Footprint.h"
 %import "lsst/afw/image/Utils.h"
 %import "lsst/afw/geom/Point.h"
