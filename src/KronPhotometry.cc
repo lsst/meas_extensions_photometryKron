@@ -32,139 +32,56 @@ namespace afwImage = lsst::afw::image;
 namespace afwMath = lsst::afw::math;
 namespace afwEllipse = lsst::afw::geom::ellipses;
 namespace afwCoord = lsst::afw::coord;
-
-/*
- * Do we have the ellipticalFootprint function?  In sufficiently recent versions of afw it's available
- * as a Footprint constructor;  when this is in a cut version this function should be deleted
- */
-#define HAVE_ellipticalFootprint 1      // n.b. if == 0 you can clean up kronLib.i too
+namespace afwTable = lsst::afw::table;
 
 namespace lsst {
 namespace meas {
 namespace algorithms {
+namespace {
 
 /**
  * @brief A class that knows how to calculate fluxes using the KRON photometry algorithm
  *
  * @ingroup meas/algorithms
  */
-template<typename ExposureT>
-class KronPhotometer : public Algorithm<afwDet::Photometry, ExposureT>
-{
+class KronFlux : public FluxAlgorithm {
 public:
-    typedef Algorithm<afwDet::Photometry, ExposureT> AlgorithmT;
-    typedef boost::shared_ptr<KronPhotometer> Ptr;
-    typedef boost::shared_ptr<KronPhotometer const> ConstPtr;
 
-    /// Ctor
-    KronPhotometer(bool fixed=false, double nSigmaForRadius=6.0, double nRadiusForFlux=2.0, 
-                   double background=0.0, double shiftmax=10.0) :
-        AlgorithmT(), _fixed(fixed), _nSigmaForRadius(nSigmaForRadius),
-        _nRadiusForFlux(nRadiusForFlux), _background(background), _shiftmax(shiftmax) {}
-
-    virtual std::string getName() const { return "KRON"; }
-
-    virtual PTR(AlgorithmT) clone() const {
-        return boost::make_shared<KronPhotometer<ExposureT> >(_nSigmaForRadius, _nRadiusForFlux,
-                                                              _background, _shiftmax);
-    }
-
-    virtual void configure(pexPolicy::Policy const& policy) {
-        if (policy.isBool("fixed")) {
-            _fixed = policy.getBool("fixed");
-        }
-        if (policy.isDouble("nSigmaForRadius")) {
-            _nSigmaForRadius = policy.getDouble("nSigmaForRadius");
-        }
-        if (policy.isDouble("nRadiusForFlux")) {
-            _nRadiusForFlux = policy.getDouble("nRadiusForFlux");
-        }
-        if (policy.isDouble("background")) {
-            _background = policy.getDouble("background");
-        }
-        if (policy.isDouble("shiftmax")) {
-            _shiftmax = policy.getDouble("shiftmax");
+    KronFlux(KronFluxControl const & ctrl, afw::table::Schema & schema) :
+        FluxAlgorithm(
+            ctrl, schema,
+            "Kron photometry: photometry with aperture set to some multiple of the second moments "
+            "determined within some multiple of the source size"
+        ),
+        _apertureKey(schema.addField<afwTable::Moments>(ctrl.name + ".radius", "Kron aperture")),
+        _badApertureKey(schema.addField<afwTable::Flag>(ctrl.name + ".flags.aperture", "Bad aperture")),
+        _badMeasurementKey(schema.addField<afwTable::Flag>(ctrl.name + ".flags.measure", "Bad measurement"))
+    {
+        if (ctrl.fixed) {
+            _centroidKey = schema[ctrl.centroid];
+            _shapeKey = schema[ctrl.shape];
         }
     }
-
-    virtual PTR(afwDet::Photometry) measureNull(void) const {
-        double const NaN = std::numeric_limits<double>::quiet_NaN();
-        return boost::make_shared<afwDet::AperturePhotometry>(NaN, NaN, NaN);
-    }
-
-    virtual PTR(afwDet::Photometry) measureSingle(afwDet::Source const&, afwDet::Source const&,
-                                                  ExposurePatch<ExposureT> const&) const;
 
 private:
-    bool _fixed;
-    double _nSigmaForRadius;
-    double _nRadiusForFlux;
-    double _background;
-    double _shiftmax;
+    
+    template <typename PixelT>
+    void _apply(
+        afw::table::SourceRecord & source,
+        afw::image::Exposure<PixelT> const & exposure,
+        afw::geom::Point2D const & center
+    ) const;
+
+    LSST_MEAS_ALGORITHM_PRIVATE_INTERFACE(KronFlux);
+
+    afwTable::Shape::MeasKey _apertureKey;
+    afwTable::Key<afwTable::Flag> _badApertureKey;
+    afwTable::Key<afwTable::Flag> _badMeasurementKey;
+    afwTable::Centroid::MeasKey _centroidKey;
+    afwTable::Shape::MeasKey _shapeKey;
 };
 
 
-#if HAVE_ellipticalFootprint
-/************************************************************************************************************/
-/**
- * Create an elliptical Footprint.
- */
-PTR(afwDet::Footprint)
-ellipticalFootprint(afwGeom::Point2I const& center, //!< The center of the circle
-                    double a,                       //!< Major axis (pixels)
-                    double b,                       //!< Minor axis (pixels)
-                    double theta,                   //!< angle of major axis from x-axis; (radians)
-                    afwGeom::Box2I const& region=afwGeom::Box2I() //!< Bounding box of MaskedImage footprint
-                   )
-{
-    PTR(afwDet::Footprint) foot(new afwDet::Footprint);
-    foot->setRegion(region);
-    
-    int const xc = center[0];           // x-centre
-    int const yc = center[1];           // y-centre
-
-    double const c = ::cos(theta);
-    double const s = ::sin(theta);
-
-    double const c0 = a*a*s*s + b*b*c*c;
-    double const c1 = c*s*(a*a - b*b)/c0;
-    double const c2 = a*b/c0;
-
-    double const ymax = ::sqrt(c0) + 1; // max extent of ellipse in y-direction
-    //
-    // We go to quite a lot of annoying trouble to ensure that all pixels that are within or intercept
-    // the ellipse are included in the Footprint
-    //
-    double x1, x2, y;
-    for (int i = -ymax; i <= ymax; ++i) {
-        double const dy = (i > 0) ? -0.5 : 0.5;
-        y = i + dy;              // chord at top of pixel (above centre)
-        if (c0 > y*y) {
-            x1 = y*c1 - c2*std::sqrt(c0 - y*y);
-            x2 = y*c1 + c2*std::sqrt(c0 - y*y);
-        } else {
-            x1 = x2 = y*c1;
-        }
-
-        y = i - dy;                     // chord at bottom of pixel (above centre)
-        if (c0 > y*y) {
-            double tmp = y*c1 - c2*std::sqrt(c0 - y*y);
-            if (tmp < x1) {
-                x1 = tmp;
-            }
-
-            tmp = y*c1 + c2*std::sqrt(c0 - y*y);
-            if (tmp > x2) {
-                x2 = tmp;
-            }
-        }
-
-        foot->addSpan(yc + i, xc + x1 + 0.5, xc + x2 + 0.5);
-    }
-
-    return foot;
-}
-#endif
 
 
 /************************************************************************************************************/
@@ -175,11 +92,11 @@ template <typename MaskedImageT, typename WeightImageT>
 class FootprintFindMoment : public afwDet::FootprintFunctor<MaskedImageT> {
 public:
     FootprintFindMoment(MaskedImageT const& mimage, ///< The image the source lives in
-                        double const xcen, double const ycen, // center of the object
-                        double const ab,                      // axis ratio
-                        double const theta                    // rotation of ellipse +ve from x axis
+                        afwGeom::Point2D const& center, // center of the object
+                        double const ab,                // axis ratio
+                        double const theta // rotation of ellipse +ve from x axis
                        ) : afwDet::FootprintFunctor<MaskedImageT>(mimage),
-                           _xcen(xcen), _ycen(ycen),
+                           _xcen(center.getX()), _ycen(center.getY()),
                            _ab(ab),
                            _cosTheta(::cos(theta)),
                            _sinTheta(::sin(theta)),
@@ -278,7 +195,13 @@ private:
 
 
 struct KronAperture {
-    KronAperture(double x, double y, afwEllipse::Axes const& ellipse) : _x(x), _y(y), _ellipse(ellipse) {}
+    KronAperture(afwGeom::Point2D const& center, afwEllipse::Axes const& ellipse) :
+        _x(center.getX()), _y(center.getY()), _ellipse(ellipse) {}
+    KronAperture(afwTable::SourceRecord const& source,
+                 afw::table::Centroid::MeasKey centroidKey,
+                 afw::table::Shape::MeasKey shapeKey) :
+        _x(source.get(centroidKey.getX())), _y(source.get(centroidKey.getY())),
+        _ellipse(source.get(shapeKey)) {}
 
     /// Accessors
     double getX() const { return _x; }
@@ -289,7 +212,7 @@ struct KronAperture {
     template<typename ImageT>
     static PTR(KronAperture) determine(ImageT const& image, // Image to measure
                                        afwDet::Source const& source, // Source with measurements
-                                       double xcen, double ycen, // Centre of source
+                                       afwGeom::Point2D const& center, // Center of source
                                        double nSigmaForRadius,   // Multiplier for Kron radius
                                        double background, // Background to remove
                                        double shiftmax // Maximum shift permitted
@@ -319,7 +242,7 @@ private:
 template<typename ImageT>
 PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measure
                                           afwDet::Source const& source, // Source with measurements
-                                          double xcen, double ycen, // Centre of source
+                                          afwGeom::Point2D const& center, // Centre of source
                                           double nSigmaForRadius,   // Multiplier for Kron radius
                                           double background, // Background to remove
                                           double shiftmax // Maximum shift permitted
@@ -343,7 +266,8 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
     } catch (pexExceptions::Exception& e) {
         detail::SdssShapeImpl shapeImpl;
         
-        if (!detail::getAdaptiveMoments(image, background, xcen, ycen, shiftmax, &shapeImpl)) {
+        if (!detail::getAdaptiveMoments(image, background, center.getX(), center.getY(),
+                                        shiftmax, &shapeImpl)) {
             std::string const& msg = "Failed to estimate adaptive moments while measuring KRON radius";
             LSST_EXCEPT_ADD(e, msg);
             throw e;
@@ -374,17 +298,11 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
     double const a = nSigmaForRadius*::sqrt(Iuu);
     double const b = nSigmaForRadius*::sqrt(Ivv);
 
-    FootprintFindMoment<ImageT, afwDet::Psf::Image> iRFunctor(image, xcen, ycen, a/b, theta);
+    FootprintFindMoment<ImageT, afwDet::Psf::Image> iRFunctor(image, center, a/b, theta);
 
     // Build an elliptical Footprint of the proper size
-    afwGeom::Point2I center(xcen + 0.5, ycen + 0.5);
-#if HAVE_ellipticalFootprint
-    PTR(afwDet::Footprint) foot(ellipticalFootprint(center, a, b, theta));
-    iRFunctor.apply(*foot);
-#else
-    afwDet::Footprint foot(center, a, b, theta);
+    afwDet::Footprint foot(afwGeom::Point2I(center.getX() + 0.5, center.getY() + 0.5), a, b, theta);
     iRFunctor.apply(foot);
-#endif
 
     if (!iRFunctor.getGood()) {
         throw LSST_EXCEPT(lsst::pex::exceptions::RuntimeErrorException,
@@ -393,7 +311,7 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
 
     double const radius = iRFunctor.getIr();
 
-    return boost::make_shared<KronAperture>(xcen, ycen, afwEllipse::Axes(radius, radius * b / a, theta));
+    return boost::make_shared<KronAperture>(center, afwEllipse::Axes(radius, radius * b / a, theta));
 }
 
 template<typename ImageT>
@@ -418,6 +336,47 @@ std::pair<double, double> KronAperture::measure(ImageT const& image, // Image of
 } // anonymous namespace
 
 /************************************************************************************************************/
+
+template <typename PixelT>
+void ApertureFlux::_apply(
+    afw::table::SourceRecord & source,
+    afw::image::Exposure<PixelT> const& exposure,
+    afw::geom::Point2D const & center
+) const {
+    MaskedImage<PixelT> const& mimage = exposure->getMaskedImage();
+
+#if 0
+    // XXX Do we have to worry about this?
+    double const xcen = patch.getCenter().getX() - mimage.getX0(); // column position in image pixel coords
+    double const ycen = patch.getCenter().getY() - mimage.getY0();  // row position
+#endif
+
+    CONST_PTR(KronAperture) aperture;
+    if (_fixed) {
+        aperture = new KronAperture(source, _centroidKey, _shapeKey);
+    } else {
+        try {
+            aperture = KronAperture::determine(mimage, source, center, _nSigmaForRadius,
+                                               _background, _shiftmax);
+        } catch(pexExceptions::Exception& e) {
+            source.set(_badApertureKey, true);
+            return;
+        }
+    }
+    source.set(_badApertureKey, false);
+
+    try {
+        std::pair<double, double> const& result = aperture->measure(mimage, _nRadiusForFlux);
+        source.set(_fluxKey, result.first);
+        source.set(_fluxErrKey, result.second);
+        source.set(_radiusKey, aperture->getEllipse());
+        source.set(_badMeasurementKey, false);
+    } catch(pexExceptions::Exception& e) {
+        source.set(_badMeasurementKey, true);
+        return;
+    }
+}
+
 
 /**
  * Calculate the desired Kron radius and flux
