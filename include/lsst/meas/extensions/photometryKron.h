@@ -1,14 +1,17 @@
+// -*- lsst-c++ -*-
 #ifndef LSST_MEAS_EXTENSIONS_PHOTOMETRY_KRON_H
 #define LSST_MEAS_EXTENSIONS_PHOTOMETRY_KRON_H
 
 #include "lsst/meas/algorithms/FluxControl.h"
+
+namespace lsst { namespace meas { namespace extensions { namespace photometryKron {
 
 /**
  *  @brief C++ control object for Gaussian flux.
  *
  *  @sa GaussianFluxConfig.
  */
-class KronFluxControl : public FluxControl {
+class KronFluxControl : public algorithms::FluxControl {
 public:
 
     LSST_CONTROL_FIELD(fixed, bool,
@@ -21,14 +24,18 @@ public:
     LSST_CONTROL_FIELD(nRadiusForFlux, double, "Number of Kron radii for Kron flux");
 
     KronFluxControl() : 
-        FluxControl("flux.kron"), fixed(false), background(0.0), shiftmax(10.0),
+        algorithms::FluxControl("flux.kron"), fixed(false), background(0.0), shiftmax(10.0),
         centroid("shape.sdss.centroid"), shape("shape.sdss"),
         nSigmaForRadius(6.0), nRadiusForFlux(2.0)
     {}
 
 private:
-    virtual PTR(AlgorithmControl) _clone() const;
-    virtual PTR(Algorithm) _makeAlgorithm(
+    virtual PTR(algorithms::AlgorithmControl) _clone() const;
+    virtual PTR(algorithms::Algorithm) _makeAlgorithm(
         afw::table::Schema & schema, PTR(daf::base::PropertyList) const & metadata
     ) const;
 };
+
+}}}} // namespace lsst::meas::extensions::photometryKron
+
+#endif // !LSST_MEAS_EXTENSIONS_PHOTOMETRY_KRON_H

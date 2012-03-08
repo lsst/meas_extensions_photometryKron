@@ -20,11 +20,9 @@
 # see <http://www.lsstcorp.org/LegalNotices/>.
 #
 
-from kronLib import *
-import lsst.utils
+from .kronLib import *
+from .version import *
 
-def version():
-    """Return current version. If a different version is setup, return that too"""
-
-    HeadURL = r"$HeadURL: svn+ssh://svn.lsstcorp.org/DMS/meas/extensions/photometryKron/trunk/python/lsst/meas/extensions/photometryKron/__init__.py $"
-    return lsst.utils.version(HeadURL, "meas_extensions_photometryKron")
+import lsst.meas.algorithms
+lsst.meas.algorithms.AlgorithmRegistry.register("flux.kron", KronFluxControl)
+del lsst # cleanup namespace

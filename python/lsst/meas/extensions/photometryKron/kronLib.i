@@ -21,9 +21,6 @@
  * the GNU General Public License along with this program.  If not,
  * see <http://www.lsstcorp.org/LegalNotices/>.
  */
-/*
- * This module is only needed to allow us to call the constructor that registers KRON measurements
- */
 
 %define kronLib_DOCSTRING
 "
@@ -32,36 +29,23 @@ Interface to Kron magnitudes
 %enddef
 
 %feature("autodoc", "1");
-%module(package="lsst.meas.extensions.photometryKron.kronLib", docstring=kronLib_DOCSTRING) kronLib
+%module(package="lsst.meas.extensions.photometryKron", docstring=kronLib_DOCSTRING) kronLib
 
-#define HAVE_ellipticalFootprint 1
-
-#if HAVE_ellipticalFootprint
 %{
 #include "lsst/base.h"
+#include "lsst/pex/logging.h"
 #include "lsst/afw/detection/Footprint.h"
 #include "lsst/afw/image/Utils.h"
 #include "lsst/afw/geom/Point.h"
+#include "lsst/meas/algorithms.h"
+#include "lsst/meas/extensions/photometryKron.h"
 %}
 
 %include "lsst/p_lsstSwig.i"
 
 %include "lsst/base.h"
-%import "lsst/afw/detection/Footprint.h"
-%import "lsst/afw/image/Utils.h"
-%import "lsst/afw/geom/Point.h"
+%import "lsst/meas/algorithms/algorithmsLib.i"
 
-%inline %{
-namespace lsst {
-namespace meas {
-namespace algorithms {
-PTR(lsst::afw::detection::Footprint)
-ellipticalFootprint(lsst::afw::geom::Point2I const& center, //!< The center of the circle
-                    double a,                               //!< Major axis (pixels)
-                    double b,                               //!< Minor axis (pixels)
-                    double theta,                           //!< angle of major axis from x-axis; (radians)
-                    lsst::afw::geom::Box2I const& region    //!< Bounding box of MaskedImage footprint
-                   );
-}}}
-%}
-#endif
+%shared_ptr(lsst::meas::extensions::photometryKron::KronFluxControl);
+
+%include "lsst/meas/extensions/photometryKron.h"
