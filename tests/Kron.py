@@ -3,10 +3,10 @@
 Tests for measuring things
 
 Run with:
-   python KronPhotometry.py
+   python Kron.py
 or
    python
-   >>> import KronPhotometry; KronPhotometry.run()
+   >>> import Kron; Kron.run()
 """
 
 import math, os, sys, unittest
@@ -16,7 +16,9 @@ import lsst.pex.logging as pexLogging
 import lsst.pex.policy as pexPolicy
 import lsst.afw.detection as afwDetection
 import lsst.afw.geom as afwGeom
+import lsst.afw.geom.ellipses as afwEllipses
 import lsst.afw.math as afwMath
+import lsst.afw.table as afwTable
 import lsst.afw.image as afwImage
 import lsst.meas.algorithms as measAlg
 import lsst.meas.extensions.photometryKron as Kron
@@ -87,16 +89,11 @@ class KronPhotometryTestCase(unittest.TestCase):
             frame = 0
             ds9.mtv(objImg, frame=frame, title="Elliptical")
 
-            args = [afwGeom.makePointI(int(xcen - gal.getX0()), int(ycen - gal.getY0())),
-                    nsigma*a, nsigma*b, math.radians(theta),
-                    afwImage.BBox(gal.getXY0(), gal.getWidth(), gal.getHeight())]
+            ellipse = afwEllipses.Ellipse(afwEllipses.Axes(nsigma*a, nsigma*b, theta),
+                                          afwGeom.Point2D(xcen - objImg.getX0(), ycen - objImg.getY0()))
+            fpEllipse = afwDetection.Footprint(ellipse)
 
-            try:
-                ellip = afwDetection.Footprint(*args)
-            except AttributeError:
-                ellip = Kron.ellipticalFootprint(*args)
-
-            displayUtils.drawFootprint(ellip, frame=frame)
+            displayUtils.drawFootprint(fpEllipse, frame=frame)
             ds9.dot("+", xcen - gal.getX0(), ycen - gal.getY0(), size=1, ctype=ds9.RED, frame=frame)
             c, s = math.cos(math.radians(theta)), math.sin(math.radians(theta))
             ds9.dot("@:%f,%f,%f" % (nsigma**2*(a**2*c**2 + b**2*s**2),
@@ -113,24 +110,23 @@ class KronPhotometryTestCase(unittest.TestCase):
         #
         # Now measure things
         #
-        mp = measAlg.makeMeasurePhotometry(objImg)
-        mp.addAlgorithm("KRON")
+        msConfig = measAlg.SourceMeasurementConfig()
+        msConfig.algorithms.names = msConfig.algorithms.names + ("flux.kron",)
+        msConfig.algorithms["flux.kron"].nSigmaForRadius = nsigma
+        msConfig.algorithms["flux.kron"].nRadiusForFlux = kfac
+        schema = afwTable.SourceTable.makeMinimalSchema()
+        ms = msConfig.makeMeasureSources(schema)
+        table = afwTable.SourceTable.make(schema)
+        msConfig.slots.setupTable(table)
+        source = table.makeRecord()
+        fp = afwDetection.Footprint(objImg.getBBox())
+        source.setFootprint(fp)
+        center = afwGeom.Point2D(xcen, ycen)
+        ms.apply(source, objImg, center)
 
-        policy = pexPolicy.Policy(pexPolicy.PolicyString(
-            """#<?cfg paf policy?>
-            KRON: {
-                nSigmaForRad: %f
-                nRadiusForFlux: %f
-            }
-            """ % (nsigma, kfac)))
-
-        mp.configure(policy)
-        peak = afwDetection.Peak(xcen, ycen)
-        values = mp.measure(peak).find("KRON")
-
-        R_K = values.getParameter()
-        flux_K = values.getFlux()
-        fluxErr_K = values.getFluxErr()
+        R_K = source.get("flux.kron.radius")
+        flux_K = source.get("flux.kron")
+        fluxErr_K = source.get("flux.kron.err")
 
         return R_K, flux_K, fluxErr_K
 
@@ -175,14 +171,9 @@ class KronPhotometryTestCase(unittest.TestCase):
         #
         # Get footprint
         #
-        args = [afwGeom.makePointI(int(xcen - objImg.getX0()), int(ycen - objImg.getY0())),
-                nsigma*a, nsigma*b, theta,
-                afwImage.BBox(objImg.getXY0(), objImg.getWidth(), objImg.getHeight())]
-
-        try:
-            ellip = afwDetection.Footprint(*args)
-        except AttributeError:
-            ellip = Kron.ellipticalFootprint(*args)
+        ellipse = afwEllipses.Ellipse(afwEllipses.Axes(nsigma*a, nsigma*b, theta),
+                                      afwGeom.Point2D(xcen - objImg.getX0(), ycen - objImg.getY0()))
+        fpEllipse = afwDetection.Footprint(ellipse)
         
         sumI = 0.0
         sumR = 0.38259771140356325/ab*(1 + math.sqrt(2)*math.hypot(math.fmod(xcen, 1), math.fmod(ycen, 1)))*\
@@ -191,7 +182,7 @@ class KronPhotometryTestCase(unittest.TestCase):
         gal = objImg.getMaskedImage().getImage()
 
         c, s = math.cos(theta), math.sin(theta)
-        for sp in ellip.getSpans():
+        for sp in fpEllipse.getSpans():
             y, x0, x1 = sp.getY(), sp.getX0(), sp.getX1()
 
             for x in range(x0, x1 + 1):
@@ -248,12 +239,8 @@ class KronPhotometryTestCase(unittest.TestCase):
                             if b > a:
                                 continue
 
-                            try:
-                                R_K, flux_K, fluxErr_K = self.makeAndMeasure(measureKron, a, b, theta,
-                                                                             dx=dx, dy=dy, kfac=kfac)
-                            except Exception, e:
-                                print e
-                                continue
+                            R_K, flux_K, fluxErr_K = self.makeAndMeasure(measureKron, a, b, theta,
+                                                                         dx=dx, dy=dy, kfac=kfac)
                                 
                             R_truth = math.sqrt(math.pi/2)
                             flux_truth = self.flux*(1 - math.exp(-0.5*(kfac*R_truth)**2))
