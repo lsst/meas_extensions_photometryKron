@@ -56,22 +56,7 @@ public:
         ),
         _radiusKey(schema.addField<double>(ctrl.name + ".radius", "Kron radius (sqrt(a*b))")),
         _badApertureKey(schema.addField<afwTable::Flag>(ctrl.name + ".flags.aperture", "Bad aperture"))
-    {
-        if (ctrl.fixed) {
-            try {
-                _centroidKey = schema[ctrl.centroid];
-                _shapeKey = schema[ctrl.shape];
-            } catch (pex::exceptions::Exception & err) {
-                LSST_EXCEPT_ADD(
-                    err, 
-                    (boost::format("Cannot run KronFlux without the shape (%s) and/or centroid (%s) "
-                                   "algorithms it is configured to use as inputs.")
-                     % ctrl.shape % ctrl.centroid).str()
-                );
-                throw err;
-            }
-        }
-    }
+    {}
 
 private:
     
@@ -86,8 +71,6 @@ private:
 
     afwTable::Key<double> _radiusKey;
     afwTable::Key<afwTable::Flag> _badApertureKey;
-    afwTable::Centroid::MeasKey _centroidKey;
-    afwTable::Shape::MeasKey _shapeKey;
 };
 
 /************************************************************************************************************/
@@ -201,11 +184,9 @@ private:
 struct KronAperture {
     KronAperture(afwGeom::Point2D const& center, afwEllipse::Axes const& ellipse) :
         _x(center.getX()), _y(center.getY()), _ellipse(ellipse) {}
-    KronAperture(afwTable::SourceRecord const& source,
-                 afw::table::Centroid::MeasKey centroidKey,
-                 afw::table::Shape::MeasKey shapeKey) :
-        _x(source.get(centroidKey.getX())), _y(source.get(centroidKey.getY())),
-        _ellipse(source.get(shapeKey)) {}
+    explicit KronAperture(afwTable::SourceRecord const& source) :
+        _x(source.getX()), _y(source.getY()),
+        _ellipse(source.getShape()) {}
 
     /// Accessors
     double getX() const { return _x; }
@@ -347,7 +328,11 @@ void KronFlux::_apply(
 
     CONST_PTR(KronAperture) aperture;
     if (ctrl.fixed) {
-        aperture.reset(new KronAperture(source, _centroidKey, _shapeKey));
+        if (source.getShapeFlag()) {
+            source.set(_badApertureKey, true);
+            return;
+        }
+        aperture.reset(new KronAperture(source));
     } else {
         try {
             aperture = KronAperture::determine(mimage, source, center, ctrl.nSigmaForRadius,
