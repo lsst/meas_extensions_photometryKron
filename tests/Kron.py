@@ -111,7 +111,7 @@ class KronPhotometryTestCase(unittest.TestCase):
         # Now measure things
         #
         msConfig = measAlg.SourceMeasurementConfig()
-        msConfig.algorithms.names = msConfig.algorithms.names + ("flux.kron",)
+        msConfig.algorithms.names.add("flux.kron")
         msConfig.algorithms["flux.kron"].nSigmaForRadius = nsigma
         msConfig.algorithms["flux.kron"].nRadiusForFlux = kfac
         schema = afwTable.SourceTable.makeMinimalSchema()
