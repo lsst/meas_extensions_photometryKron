@@ -251,11 +251,13 @@ class KronPhotometryTestCase(unittest.TestCase):
                                 print "%s flux_K %.3f %.3f %5.1f%%" % (ID, flux_K, flux_truth,
                                                                        100*(flux_K/flux_truth - 1))
 
-                            if abs(R_truth - R_K) > 1e-2*self.getTolRad(a, b):
+                            if math.isnan(R_K) or \
+                                    abs(R_truth - R_K) > 1e-2*self.getTolRad(a, b):
                                 self.assertTrue(False,
                                                 ("%s  R_Kron: %g v. exact value %g (error %.2f pixels)" %
                                                  (ID, R_K, R_truth, (R_K - R_truth))))
-                            if abs(flux_truth/flux_K - 1) > 1e-2*self.getTolFlux(a, b, kfac):
+                            if math.isnan(flux_K) or \
+                                    abs(flux_truth/flux_K - 1) > 1e-2*self.getTolFlux(a, b, kfac):
                                 self.assertTrue(False,
                                                 ("%s  flux_Kron: %g v. exact value %g (error %.1f%%)" %
                                                  (ID, flux_K, flux_truth, 100*(flux_K/flux_truth - 1))))
