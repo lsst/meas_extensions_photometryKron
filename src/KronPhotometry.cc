@@ -318,12 +318,12 @@ void KronFlux::_apply(
 
     KronFluxControl const & ctrl = static_cast<KronFluxControl const &>(this->getControl());
 
+    if (source.getShapeFlag()) {        // the shape's bad; give up now
+        return;
+    }
+    
     CONST_PTR(KronAperture) aperture;
     if (ctrl.fixed) {
-        if (source.getShapeFlag()) {
-            source.set(_badApertureKey, true);
-            return;
-        }
         aperture.reset(new KronAperture(source));
     } else {
         try {
