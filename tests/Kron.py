@@ -228,7 +228,7 @@ class KronPhotometryTestCase(unittest.TestCase):
         ab_vals = (0.5, 1.0, 2.0, 3.0, 4.0, 5.0, )
         for dx in (0.0, 0.5,):
             for dy in (0.0, 0.5,):
-                if dx + dy != 0.0:
+                if measureKron == self.measureKronInPython and dx + dy != 0.0:
                     continue
                 
                 for theta in (20.0, ):
