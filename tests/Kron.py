@@ -30,8 +30,9 @@ except NameError:
 pexLogging.Trace_setVerbosity("meas.photometry.kron", verbose)
 
 try:
-    type(display)
+    display
 except NameError:
+    ds9Frame = 0
     display = False
 
 import lsst.afw.display.ds9 as ds9
@@ -86,20 +87,20 @@ class KronPhotometryTestCase(unittest.TestCase):
         objImg.getMaskedImage().getVariance().set(1.0)
 
         if display:
-            frame = 0
-            ds9.mtv(objImg, frame=frame, title="Elliptical")
+            ds9.mtv(objImg, frame=ds9Frame, title="Elliptical")
 
             ellipse = afwEllipses.Ellipse(afwEllipses.Axes(nsigma*a, nsigma*b, theta),
                                           afwGeom.Point2D(xcen - objImg.getX0(), ycen - objImg.getY0()))
             fpEllipse = afwDetection.Footprint(ellipse)
 
-            displayUtils.drawFootprint(fpEllipse, frame=frame)
-            ds9.dot("+", xcen - gal.getX0(), ycen - gal.getY0(), size=1, ctype=ds9.RED, frame=frame)
+            displayUtils.drawFootprint(fpEllipse, frame=ds9Frame)
+            ds9.dot("+", xcen - gal.getX0(), ycen - gal.getY0(), size=1, ctype=ds9.RED, frame=ds9Frame)
+            ds9.pan(xcen - gal.getX0(), ycen - gal.getY0(), frame=ds9Frame)
             c, s = math.cos(math.radians(theta)), math.sin(math.radians(theta))
             ds9.dot("@:%f,%f,%f" % (nsigma**2*(a**2*c**2 + b**2*s**2),
                                     nsigma**2*(a**2 - b**2)*c*s,
                                     nsigma**2*(a**2*s**2 + b**2*c**2)),
-                    xcen - gal.getX0(), ycen - gal.getY0(), size=1, ctype=ds9.RED, frame=frame)
+                    xcen - gal.getX0(), ycen - gal.getY0(), size=1, ctype=ds9.RED, frame=ds9Frame)
         #
         # Do the measuring
         #
@@ -127,6 +128,20 @@ class KronPhotometryTestCase(unittest.TestCase):
         R_K = source.get("flux.kron.radius")
         flux_K = source.get("flux.kron")
         fluxErr_K = source.get("flux.kron.err")
+
+        if display:
+            shape = source.getShape()
+            if True:                    # nsigma*shape, the radius used to estimate R_K
+                shape = shape.clone()
+                shape.scale(nsigma)
+                ds9.dot("@:%f,%f,%f" % (shape.getIxx(), shape.getIxy(), shape.getIyy()), 
+                        *(source.getCentroid() - afwGeom.Extent2D(objImg.getXY0())),
+                        ctype=ds9.MAGENTA, frame=ds9Frame)
+            # Show R_K
+            shape = shape.clone(); shape.scale(R_K/shape.getTraceRadius())
+            ds9.dot("@:%f,%f,%f" % (shape.getIxx(), shape.getIxy(), shape.getIyy()), 
+                    *(source.getCentroid() - afwGeom.Extent2D(objImg.getXY0())),
+                    ctype=ds9.BLUE, frame=ds9Frame)
 
         return R_K, flux_K, fluxErr_K
 
