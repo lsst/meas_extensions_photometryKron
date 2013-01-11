@@ -138,25 +138,23 @@ class KronPhotometryTestCase(unittest.TestCase):
         #
         # Measure moments using SDSS shape algorithm
         #
-        ms = measAlg.makeMeasureShape(objImg)
-        ms.addAlgorithm("SDSS")
+        #
+        # Now measure things
+        #
+        msConfig = measAlg.SourceMeasurementConfig()
+        schema = afwTable.SourceTable.makeMinimalSchema()
+        ms = msConfig.makeMeasureSources(schema)
+        table = afwTable.SourceTable.make(schema)
+        msConfig.slots.setupTable(table)
+        source = table.makeRecord()
+        fp = afwDetection.Footprint(objImg.getBBox())
+        source.setFootprint(fp)
+        center = afwGeom.Point2D(xcen, ycen)
+        ms.apply(source, objImg, center)
 
-        policy = pexPolicy.Policy(pexPolicy.PolicyString(
-            """#<?cfg paf policy?>
-            SDSS: {
-                enabled: true
-            }
-            """))
-
-        ms.configure(policy)
-
-        peak = afwDetection.Peak(xcen, ycen)
-
-        values = ms.measure(objImg, peak).find("SDSS")
-        Mxx = values.getIxx()
-        Mxy = values.getIxy()
-        Myy = values.getIyy()
-        del values
+        Mxx = source.getIxx()
+        Mxy = source.getIxy()
+        Myy = source.getIyy()
         #
         # Calculate principal axes
         #
