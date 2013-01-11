@@ -55,7 +55,7 @@ public:
             "determined within some multiple of the source size"
         ),
         _radiusKey(schema.addField<double>(ctrl.name + ".radius", "Kron radius (sqrt(a*b))")),
-        _badApertureKey(schema.addField<afwTable::Flag>(ctrl.name + ".flags.aperture", "Bad aperture"))
+        _badApertureKey(schema.addField<afwTable::Flag>(ctrl.name + ".flags.aperture", "Bad Kron aperture"))
     {}
 
 private:
