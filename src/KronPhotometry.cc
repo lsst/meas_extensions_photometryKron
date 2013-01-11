@@ -43,7 +43,7 @@ public:
     KronFlux(KronFluxControl const & ctrl, afw::table::Schema & schema) :
         algorithms::FluxAlgorithm(
             ctrl, schema,
-            "Kron photometry: photometry with aperture set to some multiple of the second moments "
+            "Kron photometry: photometry with aperture set to some multiple of <radius>"
             "determined within some multiple of the source size"
         ),
         _radiusKey(schema.addField<double>(ctrl.name + ".radius", "Kron radius (sqrt(a*b))")),
