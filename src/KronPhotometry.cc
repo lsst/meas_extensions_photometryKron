@@ -47,7 +47,7 @@ public:
             "determined within some multiple of the source size"
         ),
         _radiusKey(schema.addField<double>(ctrl.name + ".radius", "Kron radius (sqrt(a*b))")),
-        _badApertureKey(schema.addField<afw::table::Flag>(ctrl.name + ".flags.aperture", "Bad Kron aperture"))
+        _badRadiusKey(schema.addField<afw::table::Flag>(ctrl.name + ".flags.radius", "Bad Kron radius"))
     {}
 
 private:
@@ -62,7 +62,7 @@ private:
     LSST_MEAS_ALGORITHM_PRIVATE_INTERFACE(KronFlux);
 
     afw::table::Key<double> _radiusKey;
-    afw::table::Key<afw::table::Flag> _badApertureKey;
+    afw::table::Key<afw::table::Flag> _badRadiusKey;
 };
 
 /************************************************************************************************************/
@@ -330,11 +330,10 @@ void KronFlux::_apply(
             aperture = KronAperture::determine(mimage, source, center, ctrl.nSigmaForRadius,
                                                ctrl.background, ctrl.shiftmax);
         } catch(pex::exceptions::Exception& e) {
-            source.set(_badApertureKey, true);
             return;
         }
     }
-    source.set(_badApertureKey, false);
+    source.set(_badRadiusKey, false);
 
     std::pair<double, double> result = aperture->measure(mimage, ctrl.nRadiusForFlux);
     source.set(getKeys().meas, result.first);
