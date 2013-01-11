@@ -7,23 +7,20 @@
 namespace lsst { namespace meas { namespace extensions { namespace photometryKron {
 
 /**
- *  @brief C++ control object for Gaussian flux.
+ *  @brief C++ control object for Kron flux.
  *
- *  @sa GaussianFluxConfig.
+ *  @sa KronFluxConfig.
  */
 class KronFluxControl : public algorithms::FluxControl {
 public:
 
     LSST_CONTROL_FIELD(fixed, bool,
                        "if true, use existing shape and centroid measurements instead of fitting");
-    LSST_CONTROL_FIELD(background, double, "FIXME! NEVER DOCUMENTED!");
-    LSST_CONTROL_FIELD(shiftmax, double, "FIXME! NEVER DOCUMENTED!");
     LSST_CONTROL_FIELD(nSigmaForRadius, double, "Number of sigma to set Kron radius");
     LSST_CONTROL_FIELD(nRadiusForFlux, double, "Number of Kron radii for Kron flux");
 
     KronFluxControl() : 
-        algorithms::FluxControl("flux.kron"), fixed(false), background(0.0), shiftmax(10.0),
-        nSigmaForRadius(6.0), nRadiusForFlux(2.0)
+        algorithms::FluxControl("flux.kron"), fixed(false), nSigmaForRadius(6.0), nRadiusForFlux(2.0)
     {}
 
 private:
