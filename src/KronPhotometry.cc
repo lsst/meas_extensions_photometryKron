@@ -23,18 +23,10 @@
 
 #include "lsst/meas/extensions/photometryKron.h"
 
-namespace pexPolicy = lsst::pex::policy;
-namespace pexExceptions = lsst::pex::exceptions;
-namespace pexLogging = lsst::pex::logging;
-namespace afwDet = lsst::afw::detection;
-namespace afwGeom = lsst::afw::geom;
-namespace afwImage = lsst::afw::image;
-namespace afwMath = lsst::afw::math;
-namespace afwEllipse = lsst::afw::geom::ellipses;
-namespace afwCoord = lsst::afw::coord;
-namespace afwTable = lsst::afw::table;
-
 namespace lsst {
+namespace afwDet = afw::detection;
+namespace afwEllipses = afw::geom::ellipses;
+
 namespace meas {
 namespace extensions {
 namespace photometryKron {
@@ -55,7 +47,7 @@ public:
             "determined within some multiple of the source size"
         ),
         _radiusKey(schema.addField<double>(ctrl.name + ".radius", "Kron radius (sqrt(a*b))")),
-        _badApertureKey(schema.addField<afwTable::Flag>(ctrl.name + ".flags.aperture", "Bad Kron aperture"))
+        _badApertureKey(schema.addField<afw::table::Flag>(ctrl.name + ".flags.aperture", "Bad Kron aperture"))
     {}
 
 private:
@@ -69,8 +61,8 @@ private:
 
     LSST_MEAS_ALGORITHM_PRIVATE_INTERFACE(KronFlux);
 
-    afwTable::Key<double> _radiusKey;
-    afwTable::Key<afwTable::Flag> _badApertureKey;
+    afw::table::Key<double> _radiusKey;
+    afw::table::Key<afw::table::Flag> _badApertureKey;
 };
 
 /************************************************************************************************************/
@@ -79,7 +71,7 @@ template <typename MaskedImageT, typename WeightImageT>
 class FootprintFindMoment : public afwDet::FootprintFunctor<MaskedImageT> {
 public:
     FootprintFindMoment(MaskedImageT const& mimage, ///< The image the source lives in
-                        afwGeom::Point2D const& center, // center of the object
+                        afw::geom::Point2D const& center, // center of the object
                         double const ab,                // axis ratio
                         double const theta // rotation of ellipse +ve from x axis
                        ) : afwDet::FootprintFunctor<MaskedImageT>(mimage),
@@ -103,7 +95,7 @@ public:
 #endif
 
         MaskedImageT const& mimage = this->getImage();
-        afwGeom::Box2I const& bbox(foot.getBBox());
+        afw::geom::Box2I const& bbox(foot.getBBox());
         int const x0 = bbox.getMinX(), y0 = bbox.getMinY(), x1 = bbox.getMaxX(), y1 = bbox.getMaxY();
 
         if (x0 < _imageX0 || y0 < _imageY0 ||
@@ -139,7 +131,7 @@ public:
              */
             
             double const eR = 0.38259771140356325; // <r> for a single square pixel, about the centre
-            r = (eR/_ab)*(1 + afwGeom::ROOT2*::hypot(::fmod(du, 1), ::fmod(dv, 1)));
+            r = (eR/_ab)*(1 + afw::geom::ROOT2*::hypot(::fmod(du, 1), ::fmod(dv, 1)));
         }
 #endif
 
@@ -182,22 +174,22 @@ private:
 
 
 struct KronAperture {
-    KronAperture(afwGeom::Point2D const& center, afwEllipse::Axes const& ellipse) :
+    KronAperture(afw::geom::Point2D const& center, afw::geom::ellipses::Axes const& ellipse) :
         _x(center.getX()), _y(center.getY()), _ellipse(ellipse) {}
-    explicit KronAperture(afwTable::SourceRecord const& source) :
+    explicit KronAperture(afw::table::SourceRecord const& source) :
         _x(source.getX()), _y(source.getY()),
         _ellipse(source.getShape()) {}
 
     /// Accessors
     double getX() const { return _x; }
     double getY() const { return _y; }
-    afwEllipse::Axes getEllipse() const { return _ellipse; }
+    afw::geom::ellipses::Axes getEllipse() const { return _ellipse; }
 
     /// Determine the Kron Aperture from an image
     template<typename ImageT>
     static PTR(KronAperture) determine(ImageT const& image, // Image to measure
-                                       afwTable::SourceRecord const& source, // Source with measurements
-                                       afwGeom::Point2D const& center, // Center of source
+                                       afw::table::SourceRecord const& source, // Source with measurements
+                                       afw::geom::Point2D const& center, // Center of source
                                        double nSigmaForRadius,   // Multiplier for Kron radius
                                        double background, // Background to remove
                                        double shiftmax // Maximum shift permitted
@@ -210,15 +202,15 @@ struct KronAperture {
         ) const;
 
     /// Transform a Kron Aperture to a different frame
-    PTR(KronAperture) transform(afwGeom::AffineTransform const& trans) const {
-        afwGeom::Point2D const center = trans(afwGeom::Point2D(_x, _y));
-        afwEllipse::Axes const ellipse(_ellipse.transform(trans.getLinear()));
+    PTR(KronAperture) transform(afw::geom::AffineTransform const& trans) const {
+        afw::geom::Point2D const center = trans(afw::geom::Point2D(_x, _y));
+        afw::geom::ellipses::Axes const ellipse(_ellipse.transform(trans.getLinear()));
         return boost::make_shared<KronAperture>(center, ellipse);
     }
 
 private:
     double _x, _y;                      // Centre
-    afwEllipse::Axes _ellipse;          // Ellipse defining aperture shape
+    afw::geom::ellipses::Axes _ellipse;          // Ellipse defining aperture shape
 };
 
 /*
@@ -226,8 +218,8 @@ private:
  */
 template<typename ImageT>
 PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measure
-                                          afwTable::SourceRecord const& source, // Source with measurements
-                                          afwGeom::Point2D const& center, // Centre of source
+                                          afw::table::SourceRecord const& source, // Source with measurements
+                                          afw::geom::Point2D const& center, // Centre of source
                                           double nSigmaForRadius,   // Multiplier for Kron radius
                                           double background, // Background to remove
                                           double shiftmax // Maximum shift permitted
@@ -263,7 +255,7 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
                           "Unable to measure adaptive moments");
     }
 
-    afwEllipse::Axes axes(afwEllipse::Quadrupole(Ixx, Iyy, Ixy));
+    afw::geom::ellipses::Axes axes(afw::geom::ellipses::Quadrupole(Ixx, Iyy, Ixy));
     axes.scale(nSigmaForRadius);
 
     FootprintFindMoment<ImageT, afwDet::Psf::Image> iRFunctor(
@@ -271,7 +263,7 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
     );
 
     // Build an elliptical Footprint of the proper size
-    afwDet::Footprint foot(afwEllipse::Ellipse(axes, center));
+    afwDet::Footprint foot(afw::geom::ellipses::Ellipse(axes, center));
 
     iRFunctor.apply(foot);
 
@@ -283,7 +275,7 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
     double const radius = iRFunctor.getIr();
 
     return boost::make_shared<KronAperture>(
-        center, afwEllipse::Axes(radius, radius * axes.getB() / axes.getA(), axes.getTheta())
+        center, afw::geom::ellipses::Axes(radius, radius * axes.getB() / axes.getA(), axes.getTheta())
     );
 }
 
@@ -298,11 +290,11 @@ std::pair<double, double> KronAperture::measure(ImageT const& image, // Image of
         return algorithms::photometry::calculateSincApertureFlux(
             image, _x, _y, 0.0, r2, _ellipse.getTheta(), ellip
         );
-    } catch(pexExceptions::LengthErrorException &e) {
+    } catch(pex::exceptions::LengthErrorException &e) {
         LSST_EXCEPT_ADD(e, (boost::format("Measuring Kron flux for object at (%.3f, %.3f);"
                                           " aperture radius %g,%g theta %g")
                             % _x % _y % _ellipse.getA() % _ellipse.getB() %
-                            afwGeom::radToDeg(_ellipse.getTheta())).str());
+                            afw::geom::radToDeg(_ellipse.getTheta())).str());
         throw e;
     }
 }
@@ -337,7 +329,7 @@ void KronFlux::_apply(
         try {
             aperture = KronAperture::determine(mimage, source, center, ctrl.nSigmaForRadius,
                                                ctrl.background, ctrl.shiftmax);
-        } catch(pexExceptions::Exception& e) {
+        } catch(pex::exceptions::Exception& e) {
             source.set(_badApertureKey, true);
             return;
         }
