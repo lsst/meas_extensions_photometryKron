@@ -190,9 +190,7 @@ struct KronAperture {
     static PTR(KronAperture) determine(ImageT const& image, // Image to measure
                                        afw::table::SourceRecord const& source, // Source with measurements
                                        afw::geom::Point2D const& center, // Center of source
-                                       double nSigmaForRadius,   // Multiplier for Kron radius
-                                       double background, // Background to remove
-                                       double shiftmax // Maximum shift permitted
+                                       double nSigmaForRadius   // Multiplier for Kron radius
         );
 
     /// Photometer within the Kron Aperture on an image
@@ -220,46 +218,14 @@ template<typename ImageT>
 PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measure
                                           afw::table::SourceRecord const& source, // Source with measurements
                                           afw::geom::Point2D const& center, // Centre of source
-                                          double nSigmaForRadius,   // Multiplier for Kron radius
-                                          double background, // Background to remove
-                                          double shiftmax // Maximum shift permitted
+                                          double nSigmaForRadius            // Multiplier for Kron radius
     )
 {
-    /*
-     * Estimate the object's moments using the SDSS adaptive moments algorithm
-     */
-    double const NaN = std::numeric_limits<double>::quiet_NaN();
-    double Ixx = NaN; // <xx>
-    double Ixy = NaN; // <xy>
-    double Iyy = NaN; // <yy>
-
-    typedef algorithms::detail::SdssShapeImpl ShapeImpl;
-
-    ShapeImpl shapeImpl;
-    
-    if (!algorithms::detail::getAdaptiveMoments(image, background, center.getX(), center.getY(),
-                                                shiftmax, &shapeImpl)) {
-        std::string msg = "Failed to estimate adaptive moments while measuring KRON radius";
-        throw LSST_EXCEPT(lsst::pex::exceptions::RuntimeErrorException, msg);        
-    }
-    Ixx = shapeImpl.getIxx();
-    Ixy = shapeImpl.getIxy();
-    Iyy = shapeImpl.getIyy();
-
-    if (shapeImpl.getFlag(ShapeImpl::MAXITER)
-        || shapeImpl.getFlag(ShapeImpl::UNWEIGHTED)
-        || shapeImpl.getFlag(ShapeImpl::UNWEIGHTED_BAD)
-    ) {
-        // Don't trust the adaptive moment: they could make us take forever measuring a very large aperture
-        throw LSST_EXCEPT(lsst::pex::exceptions::RuntimeErrorException,
-                          "Unable to measure adaptive moments");
-    }
-
-    afw::geom::ellipses::Axes axes(afw::geom::ellipses::Quadrupole(Ixx, Iyy, Ixy));
+    afw::geom::ellipses::Axes axes(source.getShape());
     axes.scale(nSigmaForRadius);
 
     FootprintFindMoment<ImageT, afwDet::Psf::Image> iRFunctor(
-        image, center, axes.getA() / axes.getB(), axes.getTheta()
+        image, center, axes.getA()/axes.getB(), axes.getTheta()
     );
 
     // Build an elliptical Footprint of the proper size
@@ -275,7 +241,7 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
     double const radius = iRFunctor.getIr();
 
     return boost::make_shared<KronAperture>(
-        center, afw::geom::ellipses::Axes(radius, radius * axes.getB() / axes.getA(), axes.getTheta())
+        center, afw::geom::ellipses::Axes(radius, radius*axes.getB()/axes.getA(), axes.getTheta())
     );
 }
 
@@ -327,8 +293,7 @@ void KronFlux::_apply(
         aperture.reset(new KronAperture(source));
     } else {
         try {
-            aperture = KronAperture::determine(mimage, source, center, ctrl.nSigmaForRadius,
-                                               ctrl.background, ctrl.shiftmax);
+            aperture = KronAperture::determine(mimage, source, center, ctrl.nSigmaForRadius);
         } catch(pex::exceptions::Exception& e) {
             return;
         }
