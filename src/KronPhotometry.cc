@@ -338,7 +338,7 @@ void KronFlux::_apply(
     std::pair<double, double> result = aperture->measure(mimage, ctrl.nRadiusForFlux);
     source.set(getKeys().meas, result.first);
     source.set(getKeys().err, result.second);
-    source.set(_radiusKey, aperture->getEllipse().getDeterminantRadius());
+    source.set(_radiusKey, aperture->getEllipse().getA());
     source.set(getKeys().flag, false);
 }
 
