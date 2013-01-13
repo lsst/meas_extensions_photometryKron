@@ -285,7 +285,7 @@ std::pair<double, double> KronAperture::measure(ImageT const& image, // Image of
     ) const
 {
     try {
-        double const r2 = nRadiusForFlux * _ellipse.getA() * _ellipse.getA();
+        double const r2 = nRadiusForFlux*_ellipse.getA(); // outer radius
         double const ellip = 1.0 - _ellipse.getB()/_ellipse.getA();
         return algorithms::photometry::calculateSincApertureFlux(
             image, _x, _y, 0.0, r2, _ellipse.getTheta(), ellip
