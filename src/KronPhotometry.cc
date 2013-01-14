@@ -109,8 +109,8 @@ public:
                     int x,                                  ///< column-position of pixel
                     int y                                   ///< row-position of pixel
                    ) {
-        double const dx = (x - _imageX0) - _xcen;
-        double const dy = (y - _imageY0) - _ycen;
+        double const dx = x - _xcen;
+        double const dy = y - _ycen;
         double const du =  dx*_cosTheta + dy*_sinTheta;
         double const dv = -dx*_sinTheta + dy*_cosTheta;
 
@@ -273,12 +273,6 @@ void KronFlux::_apply(
 ) const {
     source.set(getKeys().flag, true); // bad unless we get all the way to success at the end
     afw::image::MaskedImage<PixelT> const& mimage = exposure.getMaskedImage();
-
-#if 0
-    // XXX Do we have to worry about this?
-    double const xcen = patch.getCenter().getX() - mimage.getX0(); // column position in image pixel coords
-    double const ycen = patch.getCenter().getY() - mimage.getY0();  // row position
-#endif
 
     KronFluxControl const & ctrl = static_cast<KronFluxControl const &>(this->getControl());
 
