@@ -121,17 +121,20 @@ public:
 
         double r = ::hypot(du, dv*_ab); // ellipsoidal radius
 #if 1
-        if (dx*dx + dy*dy < 0.25) {     // within a pixel of the centre
+        if (::hypot(dx, dy) < 0.5) {    // within a pixel of the centre
             /*
              * We gain significant precision for flattened Gaussians by treating the central pixel specially
              *
              * If the object's centered in the pixel (and has constant surface brightness) we have <r> == eR;
              * if it's at the corner <r> = 2*eR; we interpolate between these exact results linearily in the
-             * displacement.
+             * displacement.  And then add in quadrature which is also a bit dubious
+             *
+             * We could avoid all these issues by estimating <r> using the same trick as we use for
+             * the sinc fluxes; it's not clear that it's worth it.
              */
             
             double const eR = 0.38259771140356325; // <r> for a single square pixel, about the centre
-            r = (eR/_ab)*(1 + afw::geom::ROOT2*::hypot(::fmod(du, 1), ::fmod(dv, 1)));
+            r = ::hypot(r, eR*(1 + ::hypot(dx, dy)/afw::geom::ROOT2));
         }
 #endif
 
@@ -212,7 +215,7 @@ private:
 };
 
 /*
- * Estimate the object's moments using the SDSS adaptive moments algorithm
+ * Estimate the object Kron aperture, using the shape from source.getShape() (e.g. SDSS's adaptive moments)
  */
 template<typename ImageT>
 PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measure
