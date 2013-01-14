@@ -10,6 +10,7 @@ or
 """
 
 import math, os, sys, unittest
+import numpy as np
 import lsst.utils.tests as tests
 import lsst.pex.exceptions as pexExceptions
 import lsst.pex.logging as pexLogging
@@ -70,12 +71,23 @@ class KronPhotometryTestCase(unittest.TestCase):
         for y in range(self.height):
             for x in range(self.width):
                 dx, dy = x + gal.getX0() - xcen, y + gal.getY0() - ycen
-                u =  c*dx + s*dy
-                v = -s*dx + c*dy
-                val = I0*math.exp(-0.5*((u/a)**2 + (v/b)**2))
+                if math.hypot(dx, dy) < 10.5:
+                    nsample = float(5)
+                    subZ = np.linspace(-0.5*(1 - 1/nsample), 0.5*(1 - 1/nsample), nsample)
+                else:
+                    nsample = 1
+                    subZ = [0.0]
+
+                val = 0
+                for sx in subZ:
+                    for sy in subZ:
+                        u =  c*(dx + sx) + s*(dy + sy)
+                        v = -s*(dx + sx) + c*(dy + sy)
+                        val += I0*math.exp(-0.5*((u/a)**2 + (v/b)**2))
+
                 if val < 0:
                     val = 0
-                gal.set(x, y, val)
+                gal.set(x, y, val/nsample**2)
 
                 I += val
                 Iuu += val*u**2
@@ -254,11 +266,19 @@ class KronPhotometryTestCase(unittest.TestCase):
 
                             R_K, flux_K, fluxErr_K = self.makeAndMeasure(measureKron, a, b, theta,
                                                                          dx=dx, dy=dy, kfac=kfac)
-                                
-                            R_truth = math.sqrt(math.pi/2)
-                            flux_truth = self.flux*(1 - math.exp(-0.5*(kfac*R_truth)**2))
-                            R_truth = max(a,b)*R_truth
+                            #
+                            # We'll have to correct for the pixelisation as we sum over the central
+                            # few pixels when making models, mostly do deal with b ~ 0.5 models.
+                            #
+                            # See Section 5 of
+                            #   http://www.astro.princeton.edu/~rhl/photomisc/aperture.pdf
+                            # for the source of 0.00286 etc.
+                            #
+                            R_truth0 = math.sqrt(math.pi/2)
+                            R_truth = R_truth0*math.sqrt(1 + 0.8*1/(12.0*a*b))
 
+                            flux_truth = self.flux*(1 - math.exp(-0.5*(kfac*R_truth)**2))
+                            R_truth = R_truth0*math.sqrt(max(a,b)**2 + 1/12.0*(1 + 0.00286/min(a, b)**3.9))
                             ID = "a,b %4.1f %4.1f dx,dy = %.1f,%.1f" % (a, b, dx, dy)
                             if False:
                                 print "%s R_K %.3f %.3f %5.2f pixels" % (ID, R_K, R_truth, (R_K - R_truth))
