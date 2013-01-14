@@ -111,9 +111,9 @@ class KronPhotometryTestCase(unittest.TestCase):
                                              FWHM/(2*math.sqrt(2*math.log(2))), 1, 0.1))
 
         if display:
-            ds9.mtv(objImg, frame=ds9Frame, title="Elliptical")
+            ds9.mtv(objImg, frame=ds9Frame, title="%g %g" % (a, b))
 
-            ellipse = afwEllipses.Ellipse(afwEllipses.Axes(nsigma*a, nsigma*b, theta),
+            ellipse = afwEllipses.Ellipse(afwEllipses.Axes(nsigma*a, nsigma*b, math.radians(theta)),
                                           afwGeom.Point2D(xcen - objImg.getX0(), ycen - objImg.getY0()))
             fpEllipse = afwDetection.Footprint(ellipse)
 
@@ -154,18 +154,21 @@ class KronPhotometryTestCase(unittest.TestCase):
         fluxErr_K = source.get("flux.kron.err")
 
         if display:
+            xc, yc = xcen - objImg.getX0(), ycen - objImg.getY0()
+            ds9.dot("x", xc, yc, ctype=ds9.MAGENTA, size=1, frame=ds9Frame)
+
             shape = source.getShape()
             if True:                    # nsigma*shape, the radius used to estimate R_K
                 shape = shape.clone()
                 shape.scale(nsigma)
                 ds9.dot("@:%f,%f,%f" % (shape.getIxx(), shape.getIxy(), shape.getIyy()), 
-                        *(source.getCentroid() - afwGeom.Extent2D(objImg.getXY0())),
-                        ctype=ds9.MAGENTA, frame=ds9Frame)
+                        xc, yc, ctype=ds9.MAGENTA, frame=ds9Frame)
             # Show R_K
-            shape = shape.clone(); shape.scale(R_K/shape.getTraceRadius())
-            ds9.dot("@:%f,%f,%f" % (shape.getIxx(), shape.getIxy(), shape.getIyy()), 
-                    *(source.getCentroid() - afwGeom.Extent2D(objImg.getXY0())),
-                    ctype=ds9.BLUE, frame=ds9Frame)
+            shape = shape.clone()
+            for r, ct in [(R_K, ds9.BLUE), (R_K*kfac, ds9.CYAN),]:
+                shape.scale(r/shape.getTraceRadius())
+                ds9.dot("@:%f,%f,%f" % (shape.getIxx(), shape.getIxy(), shape.getIyy()), 
+                        xc, yc, ctype=ct, frame=ds9Frame)
 
         return R_K, flux_K, fluxErr_K
 
