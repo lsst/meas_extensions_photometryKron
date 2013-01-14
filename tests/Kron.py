@@ -270,53 +270,63 @@ class KronPhotometryTestCase(unittest.TestCase):
         #
         # Make and the objects
         #
-        kfac = 2.5                      # multiple of R_Kron to use for Flux_Kron
-        kfac = 1.5
+        ab_vals = (0.5, 1.0, 2.0, 3.0, 5.0, )
+        for kfac in (1.5, 2.5,):        # multiple of R_Kron to use for Flux_Kron
+            if verbose:
+                print "K_{fac} = %g" % kfac
+            for dx in (0.0, 0.5,):
+                for dy in (0.0, 0.5,):
+                    if measureKron == self.measureKronInPython and dx + dy != 0.0:
+                        continue
 
-        ab_vals = (0.5, 1.0, 2.0, 3.0, 4.0, 5.0, )
-        for dx in (0.0, 0.5,):
-            for dy in (0.0, 0.5,):
-                if measureKron == self.measureKronInPython and dx + dy != 0.0:
-                    continue
-                
-                for theta in (20.0, ):
-                    for a in ab_vals:
-                        for b in ab_vals:
-                            if b > a:
-                                continue
+                    for theta in (0.0, 20.0, 45.0, ):
+                        for a in ab_vals:
+                            for b in ab_vals:
+                                if b > a:
+                                    continue
 
-                            R_K, flux_K, fluxErr_K = self.makeAndMeasure(measureKron, a, b, theta,
-                                                                         dx=dx, dy=dy, kfac=kfac)
-                            #
-                            # We'll have to correct for the pixelisation as we sum over the central
-                            # few pixels when making models, mostly do deal with b ~ 0.5 models.
-                            #
-                            # See Section 5 of
-                            #   http://www.astro.princeton.edu/~rhl/photomisc/aperture.pdf
-                            # for the source of 0.00286 etc.
-                            #
-                            R_truth0 = math.sqrt(math.pi/2)
-                            R_truth = R_truth0*math.sqrt(1 + 0.8*1/(12.0*a*b))
+                                R_K, flux_K, fluxErr_K = self.makeAndMeasure(measureKron, a, b, theta,
+                                                                             dx=dx, dy=dy, kfac=kfac)
+                                #
+                                # We'll have to correct for the pixelisation as we sum over the central
+                                # few pixels when making models, mostly do deal with b ~ 0.5 models.
+                                #
+                                # See Section 5 of
+                                #   http://www.astro.princeton.edu/~rhl/photomisc/aperture.pdf
+                                # for the source of 0.00286 etc.
+                                #
+                                R_truth0 = math.sqrt(math.pi/2)
+                                R_truth = R_truth0*math.sqrt(1 + 0.8*1/(12.0*a*b))
 
-                            flux_truth = self.flux*(1 - math.exp(-0.5*(kfac*R_truth)**2))
-                            R_truth = R_truth0*math.sqrt(max(a,b)**2 + 1/12.0*(1 + 0.00286/min(a, b)**3.9))
-                            ID = "a,b %4.1f %4.1f dx,dy = %.1f,%.1f" % (a, b, dx, dy)
-                            if False:
-                                print "%s R_K %.3f %.3f %5.2f pixels" % (ID, R_K, R_truth, (R_K - R_truth))
-                            if False:
-                                print "%s flux_K %.3f %.3f %5.1f%%" % (ID, flux_K, flux_truth,
-                                                                       100*(flux_K/flux_truth - 1))
+                                flux_truth = self.flux*(1 - math.exp(-0.5*(kfac*R_truth)**2))
+                                R_truth = R_truth0*math.sqrt(max(a,b)**2 + 1/12.0*(1 + 0.00286/min(a, b)**3.9))
 
-                            if math.isnan(R_K) or \
-                                    abs(R_truth - R_K) > 1e-2*self.getTolRad(a, b):
-                                self.assertTrue(False,
-                                                ("%s  R_Kron: %g v. exact value %g (error %.2f pixels)" %
-                                                 (ID, R_K, R_truth, (R_K - R_truth))))
-                            if math.isnan(flux_K) or \
-                                    abs(flux_truth/flux_K - 1) > 1e-2*self.getTolFlux(a, b, kfac):
-                                self.assertTrue(False,
-                                                ("%s  flux_Kron: %g v. exact value %g (error %.1f%%)" %
-                                                 (ID, flux_K, flux_truth, 100*(flux_K/flux_truth - 1))))
+                                failR = math.isnan(R_K) or \
+                                    abs(R_truth - R_K) > 1e-2*self.getTolRad(a, b)
+                                failFlux =  math.isnan(flux_K) or \
+                                    abs(flux_K/flux_truth - 1) > 1e-2*self.getTolFlux(a, b, kfac)
+
+                                ID = "a,b,theta %4.1f %4.1f %4.1f  dx,dy = %.1f,%.1f" % (a, b, theta, dx, dy)
+                                if (failR or failFlux) and verbose:
+                                    print "%s R_K    %10.3f %10.3f %6.3f pixels (tol %5.3f)%s" % \
+                                        (ID, R_K, R_truth, (R_K - R_truth), 1e-2*self.getTolRad(a, b),
+                                         " *" if failR else "")
+                                    print "%s flux_K %10.3f %10.3f %6.2f%%       (tol %5.3f) %s" % \
+                                        (ID, flux_K, flux_truth,
+                                         100*(flux_K/flux_truth - 1), self.getTolFlux(a, b, kfac),
+                                         " *" if failFlux else "")
+                                    if False:
+                                        continue # skip tests
+
+                                self.assertFalse(failR, (("%s  R_Kron: %g v. exact value %g " +
+                                                          "(error %.3f pixels; limit %.3f)") % \
+                                                             (ID, R_K, R_truth, (R_K - R_truth),
+                                                              1e-2*self.getTolRad(a, b))))
+
+                                self.assertFalse(failFlux, (("%s  flux_Kron: %g v. exact value %g " +
+                                                             "(error %.2f%% limit %.2f%%)") %
+                                                            (ID, flux_K, flux_truth, 100*(flux_K/flux_truth-1),
+                                                             self.getTolFlux(a, b, kfac))))
 
     def getTolRad(self, a, b):
         """Return R_K tolerance in hundredths of a pixel"""
