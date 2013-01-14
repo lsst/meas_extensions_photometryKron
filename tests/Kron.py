@@ -136,11 +136,16 @@ class KronPhotometryTestCase(unittest.TestCase):
         # Now measure things
         #
         msConfig = measAlg.SourceMeasurementConfig()
+        if False:                       # requires #2546
+            msConfig.centroider = None
+            msConfig.slots.centroid = None
+
         msConfig.algorithms.names.add("flux.kron")
         msConfig.algorithms["flux.kron"].nSigmaForRadius = nsigma
         msConfig.algorithms["flux.kron"].nRadiusForFlux = kfac
         schema = afwTable.SourceTable.makeMinimalSchema()
         ms = msConfig.makeMeasureSources(schema)
+        
         table = afwTable.SourceTable.make(schema)
         msConfig.slots.setupTable(table)
         source = table.makeRecord()
@@ -180,10 +185,11 @@ class KronPhotometryTestCase(unittest.TestCase):
         #
         # Measure moments using SDSS shape algorithm
         #
-        #
-        # Now measure things
-        #
         msConfig = measAlg.SourceMeasurementConfig()
+        if False:                       # requires #2546
+            msConfig.centroider = None
+            msConfig.slots.centroid = None
+
         schema = afwTable.SourceTable.makeMinimalSchema()
         ms = msConfig.makeMeasureSources(schema)
         table = afwTable.SourceTable.make(schema)
