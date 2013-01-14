@@ -4,22 +4,17 @@
 #include <functional>
 #include "boost/math/constants/constants.hpp"
 #include "lsst/pex/exceptions.h"
-#include "lsst/pex/logging/Trace.h"
 #include "lsst/afw/geom/Point.h"
 #include "lsst/afw/geom/Box.h"
-#include "lsst/afw/geom/Angle.h"
-#include "lsst/afw/image.h"
+#include "lsst/afw/image/Exposure.h"
 #include "lsst/afw/table/Source.h"
 #include "lsst/afw/math/Integrate.h"
 #include "lsst/meas/algorithms/Measure.h"
-
 #include "lsst/afw/detection/Psf.h"
 #include "lsst/afw/coord/Coord.h"
 #include "lsst/afw/geom/AffineTransform.h"
 #include "lsst/afw/geom/ellipses.h"
-
 #include "lsst/meas/algorithms/Photometry.h"
-#include "lsst/meas/algorithms/detail/SdssShape.h"
 
 #include "lsst/meas/extensions/photometryKron.h"
 
