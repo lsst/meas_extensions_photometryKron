@@ -105,6 +105,11 @@ class KronPhotometryTestCase(unittest.TestCase):
         objImg = afwImage.makeExposure(afwImage.makeMaskedImage(gal))
         objImg.getMaskedImage().getVariance().set(1.0)
 
+        FWHM = 5
+        ksize = 25                      # size of desired kernel
+        objImg.setPsf(afwDetection.createPsf("DoubleGaussian", ksize, ksize,
+                                             FWHM/(2*math.sqrt(2*math.log(2))), 1, 0.1))
+
         if display:
             ds9.mtv(objImg, frame=ds9Frame, title="Elliptical")
 
