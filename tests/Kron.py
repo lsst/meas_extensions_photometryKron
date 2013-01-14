@@ -64,7 +64,14 @@ class KronPhotometryTestCase(unittest.TestCase):
         I0 = self.flux/(2*math.pi*a*b)
 
         gal = afwImage.ImageF(self.width, self.height)
-        gal.setXY0(10, 10)
+        if True:
+            global warnedXY0
+            try: warnedXY0
+            except:            
+                print "Not setting XY0"
+                warnedXY0 = True
+        else:
+            gal.setXY0(10, 10)
 
         c, s = math.cos(math.radians(theta)), math.sin(math.radians(theta))
         I, Iuu, Ivv = 0.0, 0.0, 0.0
