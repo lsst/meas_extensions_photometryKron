@@ -333,17 +333,15 @@ class KronPhotometryTestCase(unittest.TestCase):
 
         if b <= 0.5:
             if a <= 0.5:
-                tol = 25
-            elif a <= 1:
-                tol = 14
+                tol = 35
             elif a <= 2:
-                tol = 10
+                tol = 350
             else:
-                tol = 6
+                tol = 25*a              # i.e. 0.25*a
         elif b <= 1:
-            tol = 2.5
+            tol = 5.0
         else:
-            tol = 0.75
+            tol = 1.0
 
         return tol
 
@@ -354,28 +352,36 @@ class KronPhotometryTestCase(unittest.TestCase):
                 if kfac > 2:
                     tol = 5.0
                 else:
-                    tol = 16.0
+                    tol = 10.0
+            elif a <= 1.0:
+                if kfac <= 1.5:
+                    tol = 10.0
+                else:
+                    tol = 4.0
             else:
                 if kfac > 2:
                     tol = 3.0
                 elif kfac > 1.5:
                     tol = 5.0
                 else:
-                    tol = 7.0
+                    tol = 10.0
         elif b <= 1:
-            if kfac > 2:
-                tol = 0.25
-            elif kfac > 1.5:
-                tol = 0.5
+            if a <= 1:
+                tol = 2.0
             else:
-                tol = 1.2
+                if kfac > 2:
+                    tol = 0.25
+                elif kfac > 1.5:
+                    tol = 0.5
+                else:
+                    tol = 1.27
         elif b <= 2:
             if kfac > 1.5:
                 tol = 0.1
             else:
-                tol = 0.6
+                tol = 0.5
         else:
-            tol = 0.1
+            tol = 0.30
 
         return tol
 
