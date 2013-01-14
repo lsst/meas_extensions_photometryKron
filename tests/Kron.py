@@ -150,7 +150,8 @@ class KronPhotometryTestCase(unittest.TestCase):
         R_K = source.get("flux.kron.radius")
         flux_K = source.get("flux.kron")
         fluxErr_K = source.get("flux.kron.err")
-
+        flags_K = source.get("flux.kron.flags")
+        
         if display:
             xc, yc = xcen - objImg.getX0(), ycen - objImg.getY0()
             ds9.dot("x", xc, yc, ctype=ds9.MAGENTA, size=1, frame=ds9Frame)
@@ -168,7 +169,7 @@ class KronPhotometryTestCase(unittest.TestCase):
                 ds9.dot("@:%f,%f,%f" % (shape.getIxx(), shape.getIxy(), shape.getIyy()), 
                         xc, yc, ctype=ct, frame=ds9Frame)
 
-        return R_K, flux_K, fluxErr_K
+        return R_K, flux_K, fluxErr_K, flags_K
 
     def measureKronInPython(self, objImg, xcen, ycen, nsigma, kfac):
         """Measure the Kron quantities of an elliptical Gaussian in python
@@ -249,7 +250,7 @@ class KronPhotometryTestCase(unittest.TestCase):
                 if math.hypot(u/a, v/b) < kfac:
                     sumI += gal.get(x, y)
 
-        return R_K, sumI, 0
+        return R_K, sumI, 0, False
 
     def testEllipticalGaussian(self):
         """Test measuring the Kron quantities of an elliptical Gaussian"""
@@ -278,8 +279,8 @@ class KronPhotometryTestCase(unittest.TestCase):
                                 if b > a:
                                     continue
 
-                                R_K, flux_K, fluxErr_K = self.makeAndMeasure(measureKron, a, b, theta,
-                                                                             dx=dx, dy=dy, kfac=kfac)
+                                R_K, flux_K, fluxErr_K, flags_K = self.makeAndMeasure(measureKron, a, b, theta,
+                                                                                      dx=dx, dy=dy, kfac=kfac)
                                 #
                                 # We'll have to correct for the pixelisation as we sum over the central
                                 # few pixels when making models, mostly do deal with b ~ 0.5 models.
@@ -294,9 +295,9 @@ class KronPhotometryTestCase(unittest.TestCase):
                                 flux_truth = self.flux*(1 - math.exp(-0.5*(kfac*R_truth)**2))
                                 R_truth = R_truth0*math.sqrt(max(a,b)**2 + 1/12.0*(1 + 0.00286/min(a, b)**3.9))
 
-                                failR = math.isnan(R_K) or \
+                                failR = math.isnan(R_K) or flags_K or \
                                     abs(R_truth - R_K) > 1e-2*self.getTolRad(a, b)
-                                failFlux =  math.isnan(flux_K) or \
+                                failFlux =  math.isnan(flux_K) or flags_K or \
                                     abs(flux_K/flux_truth - 1) > 1e-2*self.getTolFlux(a, b, kfac)
 
                                 ID = "a,b,theta %4.1f %4.1f %4.1f  dx,dy = %.1f,%.1f" % (a, b, theta, dx, dy)
