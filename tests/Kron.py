@@ -114,10 +114,11 @@ class KronPhotometryTestCase(unittest.TestCase):
             ds9.dot("+", xcen - gal.getX0(), ycen - gal.getY0(), size=1, ctype=ds9.RED, frame=ds9Frame)
             ds9.pan(xcen - gal.getX0(), ycen - gal.getY0(), frame=ds9Frame)
             c, s = math.cos(math.radians(theta)), math.sin(math.radians(theta))
-            ds9.dot("@:%f,%f,%f" % (nsigma**2*(a**2*c**2 + b**2*s**2),
+            # N.b. add 1/12 in quadrature to allow for pixellisation
+            ds9.dot("@:%f,%f,%f" % (nsigma**2*((a**2 + 1/12.0)*c**2 + (b**2 + 1/12.0)*s**2),
                                     nsigma**2*(a**2 - b**2)*c*s,
-                                    nsigma**2*(a**2*s**2 + b**2*c**2)),
-                    xcen - gal.getX0(), ycen - gal.getY0(), size=1, ctype=ds9.RED, frame=ds9Frame)
+                                    nsigma**2*((a**2 + 1/12.0)*s**2 + (b**2 + 1/12.0)*c**2)),
+                    xcen - gal.getX0(), ycen - gal.getY0(), size=1, ctype=ds9.RED, frame=ds9Frame, silent=True)
         #
         # Do the measuring
         #
