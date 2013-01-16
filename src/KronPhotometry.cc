@@ -185,11 +185,10 @@ struct KronAperture {
 
     /// Determine the Kron Aperture from an image
     template<typename ImageT>
-    static PTR(KronAperture) determine(ImageT const& image, // Image to measure
-                                       afw::table::SourceRecord const& source, // Source with measurements
-                                       afw::geom::Point2D const& center, // Center of source
-                                       double nSigmaForRadius   // Multiplier for Kron radius
-        );
+    static PTR(KronAperture) determine(ImageT const& image, afw::table::SourceRecord const& source,
+                                       afw::geom::Point2D const& center,
+                                       double nSigmaForRadius, int nIter
+                                      );
 
     /// Photometer within the Kron Aperture on an image
     template<typename ImageT>
@@ -216,31 +215,48 @@ template<typename ImageT>
 PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measure
                                           afw::table::SourceRecord const& source, // Source with measurements
                                           afw::geom::Point2D const& center, // Centre of source
-                                          double nSigmaForRadius            // Multiplier for Kron radius
+                                          double nSigmaForRadius,           // Multiplier for Kron radius
+                                          int nIter                         // Number of times to iterate
     )
 {
     afw::geom::ellipses::Axes axes(source.getShape());
-    axes.scale(nSigmaForRadius);
 
-    FootprintFindMoment<ImageT, afwDet::Psf::Image> iRFunctor(
-        image, center, axes.getA()/axes.getB(), axes.getTheta()
-    );
+    double radius0 = axes.getDeterminantRadius();
+    double radius = std::numeric_limits<double>::quiet_NaN();
+    for (int i = 0; i < nIter; ++i) {
+        axes.scale(nSigmaForRadius);
+        FootprintFindMoment<ImageT, afwDet::Psf::Image> iRFunctor(
+                                                   image, center, axes.getA()/axes.getB(), axes.getTheta()
+                                                                 );
+        
+        // Build an elliptical Footprint of the proper size
+        afwDet::Footprint foot(afw::geom::ellipses::Ellipse(axes, center));
 
-    // Build an elliptical Footprint of the proper size
-    afwDet::Footprint foot(afw::geom::ellipses::Ellipse(axes, center));
+        try {
+            iRFunctor.apply(foot);
+        } catch(lsst::pex::exceptions::OutOfRangeException &e) {
+            if (i == 0) {
+                LSST_EXCEPT_ADD(e, "Determining Kron aperture");
+            }
+            break;                      // use the radius we have
+        }
+        
+        if (!iRFunctor.getGood()) {
+            throw LSST_EXCEPT(lsst::pex::exceptions::RuntimeErrorException,
+                              "Bad footprint when determining Kron aperture");
+        }
+        
+        radius = iRFunctor.getIr();
+        if (radius <= radius0) {
+            break;
+        }
+        radius0 = radius;
 
-    iRFunctor.apply(foot);
-
-    if (!iRFunctor.getGood()) {
-        throw LSST_EXCEPT(lsst::pex::exceptions::RuntimeErrorException,
-                          "Bad footprint when determining Kron aperture");
+        axes.scale(radius/axes.getDeterminantRadius());
     }
-
-    double const radius = iRFunctor.getIr();
-
+    
     return boost::make_shared<KronAperture>(
-        center, afw::geom::ellipses::Axes(radius, radius*axes.getB()/axes.getA(), axes.getTheta())
-    );
+                 center, afw::geom::ellipses::Axes(radius, radius*axes.getB()/axes.getA(), axes.getTheta()));
 }
 
 template<typename ImageT>
@@ -285,7 +301,8 @@ void KronFlux::_apply(
         aperture.reset(new KronAperture(source));
     } else {
         try {
-            aperture = KronAperture::determine(mimage, source, center, ctrl.nSigmaForRadius);
+            aperture = KronAperture::determine(mimage, source, center,
+                                               ctrl.nSigmaForRadius, ctrl.nIterForRadius);
         } catch(pex::exceptions::Exception& e) {
             return;
         }

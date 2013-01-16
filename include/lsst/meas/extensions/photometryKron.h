@@ -16,11 +16,15 @@ public:
 
     LSST_CONTROL_FIELD(fixed, bool,
                        "if true, use existing shape and centroid measurements instead of fitting");
-    LSST_CONTROL_FIELD(nSigmaForRadius, double, "Number of sigma to set Kron radius");
+    LSST_CONTROL_FIELD(nSigmaForRadius, double, "Multiplier of rms size for aperture used to initially estimate the Kron radius");
+    LSST_CONTROL_FIELD(nIterForRadius, int, "Number of times to iterate when setting the Kron radius");
     LSST_CONTROL_FIELD(nRadiusForFlux, double, "Number of Kron radii for Kron flux");
 
     KronFluxControl() : 
-        algorithms::FluxControl("flux.kron"), fixed(false), nSigmaForRadius(6.0), nRadiusForFlux(2.0)
+        algorithms::FluxControl("flux.kron"), fixed(false),
+        nSigmaForRadius(6.0),
+        nIterForRadius(1),
+        nRadiusForFlux(2.5)
     {}
 
 private:

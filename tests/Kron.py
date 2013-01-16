@@ -51,7 +51,7 @@ class KronPhotometryTestCase(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def makeAndMeasure(self, measureKron, a, b, theta, dx=0.0, dy=0.0, nsigma=6, kfac=2):
+    def makeAndMeasure(self, measureKron, a, b, theta, dx=0.0, dy=0.0, nsigma=6, kfac=2, nIterForRadius=1):
         """Make and measure an elliptical Gaussian"""
 
         xcen, ycen = 0.5*self.width + dx, 0.5*self.height + dy
@@ -121,9 +121,9 @@ class KronPhotometryTestCase(unittest.TestCase):
         #
         # Do the measuring
         #
-        return measureKron(objImg, xcen, ycen, nsigma, kfac)
+        return measureKron(objImg, xcen, ycen, nsigma, kfac, nIterForRadius)
 
-    def measureKron(self, objImg, xcen, ycen, nsigma, kfac):
+    def measureKron(self, objImg, xcen, ycen, nsigma, kfac, nIterForRadius):
         """Measure Kron quantities using the C++ code"""
         #
         # Now measure things
@@ -135,6 +135,7 @@ class KronPhotometryTestCase(unittest.TestCase):
 
         msConfig.algorithms.names.add("flux.kron")
         msConfig.algorithms["flux.kron"].nSigmaForRadius = nsigma
+        msConfig.algorithms["flux.kron"].nIterForRadius = nIterForRadius
         msConfig.algorithms["flux.kron"].nRadiusForFlux = kfac
         schema = afwTable.SourceTable.makeMinimalSchema()
         ms = msConfig.makeMeasureSources(schema)
@@ -165,13 +166,13 @@ class KronPhotometryTestCase(unittest.TestCase):
             # Show R_K
             shape = shape.clone()
             for r, ct in [(R_K, ds9.BLUE), (R_K*kfac, ds9.CYAN),]:
-                shape.scale(r/shape.getTraceRadius())
+                shape.scale(r/afwGeom.ellipses.Axes(shape).getA())
                 ds9.dot("@:%f,%f,%f" % (shape.getIxx(), shape.getIxy(), shape.getIyy()), 
                         xc, yc, ctype=ct, frame=ds9Frame)
 
         return R_K, flux_K, fluxErr_K, flags_K
 
-    def measureKronInPython(self, objImg, xcen, ycen, nsigma, kfac):
+    def measureKronInPython(self, objImg, xcen, ycen, nsigma, kfac, nIterForRadius):
         """Measure the Kron quantities of an elliptical Gaussian in python
 
         N.b. only works for XY0 == (0, 0)
@@ -265,6 +266,7 @@ class KronPhotometryTestCase(unittest.TestCase):
         # Make and the objects
         #
         ab_vals = (0.5, 1.0, 2.0, 3.0, 5.0, )
+        nIter = 2
         for kfac in (1.5, 2.5,):        # multiple of R_Kron to use for Flux_Kron
             if verbose:
                 print "K_{fac} = %g" % kfac
@@ -280,7 +282,9 @@ class KronPhotometryTestCase(unittest.TestCase):
                                     continue
 
                                 R_K, flux_K, fluxErr_K, flags_K = self.makeAndMeasure(measureKron, a, b, theta,
-                                                                                      dx=dx, dy=dy, kfac=kfac)
+                                                                                      dx=dx, dy=dy, kfac=kfac,
+                                                                                      #nsigma=3,
+                                                                                      nIterForRadius=nIter)
                                 #
                                 # We'll have to correct for the pixelisation as we sum over the central
                                 # few pixels when making models, mostly do deal with b ~ 0.5 models.
@@ -301,7 +305,7 @@ class KronPhotometryTestCase(unittest.TestCase):
                                     abs(flux_K/flux_truth - 1) > 1e-2*self.getTolFlux(a, b, kfac)
 
                                 ID = "a,b,theta %4.1f %4.1f %4.1f  dx,dy = %.1f,%.1f" % (a, b, theta, dx, dy)
-                                if (failR or failFlux) and verbose:
+                                if ((failR or failFlux) and verbose) or verbose > 1:
                                     print "%s R_K    %10.3f %10.3f %6.3f pixels (tol %5.3f)%s" % \
                                         (ID, R_K, R_truth, (R_K - R_truth), 1e-2*self.getTolRad(a, b),
                                          " *" if failR else "")
@@ -309,7 +313,7 @@ class KronPhotometryTestCase(unittest.TestCase):
                                         (ID, flux_K, flux_truth,
                                          100*(flux_K/flux_truth - 1), self.getTolFlux(a, b, kfac),
                                          " *" if failFlux else "")
-                                    if False:
+                                    if not False:
                                         continue # skip tests
 
                                 self.assertFalse(failR, (("%s  R_Kron: %g v. exact value %g " +
