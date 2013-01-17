@@ -167,7 +167,7 @@ class KronPhotometryTestCase(unittest.TestCase):
             # Show R_K
             shape = shape.clone()
             for r, ct in [(R_K, ds9.BLUE), (R_K*kfac, ds9.CYAN),]:
-                shape.scale(r/afwGeom.ellipses.Axes(shape).getA())
+                shape.scale(r/shape.getDeterminantRadius())
                 ds9.dot("@:%f,%f,%f" % (shape.getIxx(), shape.getIxy(), shape.getIyy()), 
                         xc, yc, ctype=ct, frame=ds9Frame)
 
@@ -298,7 +298,7 @@ class KronPhotometryTestCase(unittest.TestCase):
                                 R_truth = R_truth0*math.sqrt(1 + 0.8*1/(12.0*a*b))
 
                                 flux_truth = self.flux*(1 - math.exp(-0.5*(kfac*R_truth)**2))
-                                R_truth = R_truth0*math.sqrt(max(a,b)**2 + 1/12.0*(1 + 0.00286/min(a, b)**3.9))
+                                R_truth = R_truth0*math.sqrt(a*b + 1/12.0*(1 + 0.00286/min(a, b)**3.9))
 
                                 failR = math.isnan(R_K) or flags_K or \
                                     abs(R_truth - R_K) > 1e-2*self.getTolRad(a, b)
