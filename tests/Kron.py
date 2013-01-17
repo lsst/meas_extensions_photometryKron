@@ -28,13 +28,9 @@ try:
     type(verbose)
 except NameError:
     verbose = 0
-pexLogging.Trace_setVerbosity("meas.photometry.kron", verbose)
-
-try:
-    display
-except NameError:
-    ds9Frame = 0
     display = False
+    ds9Frame = 0
+pexLogging.Trace_setVerbosity("meas.photometry.kron", verbose)
 
 import lsst.afw.display.ds9 as ds9
 import lsst.afw.display.utils as displayUtils
@@ -47,11 +43,14 @@ class KronPhotometryTestCase(unittest.TestCase):
     def setUp(self):
         self.flux = 1e5
         self.width, self.height = 200, 200
+        self.objImg = None
         
     def tearDown(self):
-        pass
+        if self.objImg:
+            del self.objImg
 
-    def makeAndMeasure(self, measureKron, a, b, theta, dx=0.0, dy=0.0, nsigma=6, kfac=2, nIterForRadius=1):
+    def makeAndMeasure(self, measureKron, a, b, theta, dx=0.0, dy=0.0, nsigma=6, kfac=2, nIterForRadius=1,
+                       makeImage=True):
         """Make and measure an elliptical Gaussian"""
 
         xcen, ycen = 0.5*self.width + dx, 0.5*self.height + dy
@@ -63,66 +62,66 @@ class KronPhotometryTestCase(unittest.TestCase):
             theta += 90
         I0 = self.flux/(2*math.pi*a*b)
 
-        gal = afwImage.ImageF(self.width, self.height)
-        gal.setXY0(10, 10)
+        if makeImage:
+            self.objImg = None
+        if not self.objImg:
+            gal = afwImage.ImageF(self.width, self.height)
+            gal.setXY0(10, 10)
 
-        c, s = math.cos(math.radians(theta)), math.sin(math.radians(theta))
-        I, Iuu, Ivv = 0.0, 0.0, 0.0
-        for y in range(self.height):
-            for x in range(self.width):
-                dx, dy = x + gal.getX0() - xcen, y + gal.getY0() - ycen
-                if math.hypot(dx, dy) < 10.5:
-                    nsample = float(5)
-                    subZ = np.linspace(-0.5*(1 - 1/nsample), 0.5*(1 - 1/nsample), nsample)
-                else:
-                    nsample = 1
-                    subZ = [0.0]
-
-                val = 0
-                for sx in subZ:
-                    for sy in subZ:
-                        u =  c*(dx + sx) + s*(dy + sy)
-                        v = -s*(dx + sx) + c*(dy + sy)
-                        val += I0*math.exp(-0.5*((u/a)**2 + (v/b)**2))
-
-                if val < 0:
-                    val = 0
-                gal.set(x, y, val/nsample**2)
-
-                I += val
-                Iuu += val*u**2
-                Ivv += val*v**2
-
-        Iuu /= I; Ivv /= I
-
-        objImg = afwImage.makeExposure(afwImage.makeMaskedImage(gal))
-        objImg.getMaskedImage().getVariance().set(1.0)
-
-        FWHM = 5
-        ksize = 25                      # size of desired kernel
-        objImg.setPsf(afwDetection.createPsf("DoubleGaussian", ksize, ksize,
-                                             FWHM/(2*math.sqrt(2*math.log(2))), 1, 0.1))
-
-        if display:
-            ds9.mtv(objImg, frame=ds9Frame, title="%g %g" % (a, b))
-
-            ellipse = afwEllipses.Ellipse(afwEllipses.Axes(nsigma*a, nsigma*b, math.radians(theta)),
-                                          afwGeom.Point2D(xcen - objImg.getX0(), ycen - objImg.getY0()))
-            fpEllipse = afwDetection.Footprint(ellipse)
-
-            displayUtils.drawFootprint(fpEllipse, frame=ds9Frame)
-            ds9.dot("+", xcen - gal.getX0(), ycen - gal.getY0(), size=1, ctype=ds9.RED, frame=ds9Frame)
-            ds9.pan(xcen - gal.getX0(), ycen - gal.getY0(), frame=ds9Frame)
             c, s = math.cos(math.radians(theta)), math.sin(math.radians(theta))
-            # N.b. add 1/12 in quadrature to allow for pixellisation
-            ds9.dot("@:%f,%f,%f" % (nsigma**2*((a**2 + 1/12.0)*c**2 + (b**2 + 1/12.0)*s**2),
-                                    nsigma**2*(a**2 - b**2)*c*s,
-                                    nsigma**2*((a**2 + 1/12.0)*s**2 + (b**2 + 1/12.0)*c**2)),
-                    xcen - gal.getX0(), ycen - gal.getY0(), size=1, ctype=ds9.RED, frame=ds9Frame, silent=True)
+            I, Iuu, Ivv = 0.0, 0.0, 0.0
+            for y in range(self.height):
+                for x in range(self.width):
+                    dx, dy = x + gal.getX0() - xcen, y + gal.getY0() - ycen
+                    if math.hypot(dx, dy) < 10.5:
+                        nsample = float(5)
+                        subZ = np.linspace(-0.5*(1 - 1/nsample), 0.5*(1 - 1/nsample), nsample)
+                    else:
+                        nsample = 1
+                        subZ = [0.0]
+
+                    val = 0
+                    for sx in subZ:
+                        for sy in subZ:
+                            u =  c*(dx + sx) + s*(dy + sy)
+                            v = -s*(dx + sx) + c*(dy + sy)
+                            val += I0*math.exp(-0.5*((u/a)**2 + (v/b)**2))
+
+                    if val < 0:
+                        val = 0
+                    gal.set(x, y, val/nsample**2)
+
+                    I += val
+                    Iuu += val*u**2
+                    Ivv += val*v**2
+
+            Iuu /= I; Ivv /= I
+
+            self.objImg = afwImage.makeExposure(afwImage.makeMaskedImage(gal))
+            self.objImg.getMaskedImage().getVariance().set(1.0)
+
+            if display:
+                ds9.mtv(self.objImg, frame=ds9Frame, title="%g %g" % (a, b))
+
+                ds9.dot("+", xcen - self.objImg.getX0(), ycen - self.objImg.getY0(),
+                        size=1, ctype=ds9.RED, frame=ds9Frame)
+                ds9.pan(xcen - self.objImg.getX0(), ycen - self.objImg.getY0(), frame=ds9Frame)
+                c, s = math.cos(math.radians(theta)), math.sin(math.radians(theta))
+                # N.b. add 1/12 in quadrature to allow for pixellisation
+                ds9.dot("@:%f,%f,%f" % (nsigma**2*((a**2 + 1/12.0)*c**2 + (b**2 + 1/12.0)*s**2),
+                                        nsigma**2*(a**2 - b**2)*c*s,
+                                        nsigma**2*((a**2 + 1/12.0)*s**2 + (b**2 + 1/12.0)*c**2)),
+                        xcen - self.objImg.getX0(), ycen - self.objImg.getY0(),
+                        size=1, ctype=ds9.RED, frame=ds9Frame, silent=True)
         #
         # Do the measuring
         #
-        return measureKron(objImg, xcen, ycen, nsigma, kfac, nIterForRadius)
+        FWHM = 5
+        ksize = 25                      # size of desired kernel
+        self.objImg.setPsf(afwDetection.createPsf("DoubleGaussian", ksize, ksize,
+                                                  FWHM/(2*math.sqrt(2*math.log(2))), 1, 0.1))
+
+        return measureKron(self.objImg, xcen, ycen, nsigma, kfac, nIterForRadius)
 
     def measureKron(self, objImg, xcen, ycen, nsigma, kfac, nIterForRadius):
         """Measure Kron quantities using the C++ code"""
@@ -173,7 +172,7 @@ class KronPhotometryTestCase(unittest.TestCase):
 
         return R_K, flux_K, fluxErr_K, flags_K
 
-    def measureKronInPython(self, objImg, xcen, ycen, nsigma, kfac, nIterForRadius):
+    def measureKronInPython(self, objImg, xcen, ycen, nsigma, kfac, nIterForRadius, makeImage=None):
         """Measure the Kron quantities of an elliptical Gaussian in python
 
         N.b. only works for XY0 == (0, 0)
@@ -268,24 +267,23 @@ class KronPhotometryTestCase(unittest.TestCase):
         #
         ab_vals = (0.5, 1.0, 2.0, 3.0, 5.0, )
         nIter = 2
-        for kfac in (1.5, 2.5,):        # multiple of R_Kron to use for Flux_Kron
-            if verbose:
-                print "K_{fac} = %g" % kfac
-            for dx in (0.0, 0.5,):
-                for dy in (0.0, 0.5,):
-                    if measureKron == self.measureKronInPython and dx + dy != 0.0:
-                        continue
+        for dx in (0.0, 0.5,):
+            for dy in (0.0, 0.5,):
+                if measureKron == self.measureKronInPython and dx + dy != 0.0:
+                    continue
 
-                    for theta in (0.0, 20.0, 45.0, ):
-                        for a in ab_vals:
-                            for b in ab_vals:
-                                if b > a:
-                                    continue
+                for theta in (0.0, 20.0, 45.0, ):
+                    for a in ab_vals:
+                        for b in ab_vals:
+                            if b > a:
+                                continue
 
-                                R_K, flux_K, fluxErr_K, flags_K = self.makeAndMeasure(measureKron, a, b, theta,
-                                                                                      dx=dx, dy=dy, kfac=kfac,
-                                                                                      #nsigma=3,
-                                                                                      nIterForRadius=nIter)
+                            makeImage = True
+                            for kfac in (1.5, 2.5,):        # multiple of R_Kron to use for Flux_Kron
+                                R_K, flux_K, fluxErr_K, flags_K = \
+                                    self.makeAndMeasure(measureKron, a, b, theta, dx=dx, dy=dy, kfac=kfac,
+                                                        nIterForRadius=nIter, makeImage=makeImage)
+                                makeImage = False
                                 #
                                 # We'll have to correct for the pixelisation as we sum over the central
                                 # few pixels when making models, mostly do deal with b ~ 0.5 models.
@@ -305,7 +303,8 @@ class KronPhotometryTestCase(unittest.TestCase):
                                 failFlux =  math.isnan(flux_K) or flags_K or \
                                     abs(flux_K/flux_truth - 1) > 1e-2*self.getTolFlux(a, b, kfac)
 
-                                ID = "a,b,theta %4.1f %4.1f %4.1f  dx,dy = %.1f,%.1f" % (a, b, theta, dx, dy)
+                                ID = "a,b,theta %4.1f %4.1f %4.1f  dx,dy = %.1f,%.1f  kfac=%g" % \
+                                    (a, b, theta, dx, dy, kfac)
                                 if ((failR or failFlux) and verbose) or verbose > 1:
                                     print "%s R_K    %10.3f %10.3f %6.3f pixels (tol %5.3f)%s" % \
                                         (ID, R_K, R_truth, (R_K - R_truth), 1e-2*self.getTolRad(a, b),
