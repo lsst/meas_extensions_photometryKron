@@ -143,8 +143,11 @@ class KronPhotometryTestCase(unittest.TestCase):
         table = afwTable.SourceTable.make(schema)
         msConfig.slots.setupTable(table)
         source = table.makeRecord()
-        fp = afwDetection.Footprint(objImg.getBBox())
+
+        ss = afwDetection.FootprintSet(objImg.getMaskedImage(), afwDetection.Threshold(0.1))
+        fp = ss.getFootprints()[0]
         source.setFootprint(fp)
+
         center = afwGeom.Point2D(xcen, ycen)
         ms.apply(source, objImg, center)
 
@@ -156,6 +159,7 @@ class KronPhotometryTestCase(unittest.TestCase):
         if display:
             xc, yc = xcen - objImg.getX0(), ycen - objImg.getY0()
             ds9.dot("x", xc, yc, ctype=ds9.MAGENTA, size=1, frame=ds9Frame)
+            displayUtils.drawFootprint(fp, XY0=objImg.getXY0())
 
             shape = source.getShape()
             if True:                    # nsigma*shape, the radius used to estimate R_K
