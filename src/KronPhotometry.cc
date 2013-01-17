@@ -41,7 +41,9 @@ public:
             "Kron photometry: photometry with aperture set to some multiple of <radius>"
             "determined within some multiple of the source size"
         ),
-        _radiusKey(schema.addField<double>(ctrl.name + ".radius", "Kron radius (sqrt(a*b))")),
+        _radiusKey(schema.addField<float>(ctrl.name + ".radius", "Kron radius (sqrt(a*b))")),
+        _radiusForRadiusKey(schema.addField<float>(ctrl.name + ".radiusForRadius",
+                                          "Radius used to estimate <radius> (sqrt(a*b))")),
         _badRadiusKey(schema.addField<afw::table::Flag>(ctrl.name + ".flags.radius", "Bad Kron radius"))
     {}
 
@@ -56,7 +58,8 @@ private:
 
     LSST_MEAS_ALGORITHM_PRIVATE_INTERFACE(KronFlux);
 
-    afw::table::Key<double> _radiusKey;
+    afw::table::Key<float> _radiusKey;
+    afw::table::Key<float> _radiusForRadiusKey;
     afw::table::Key<afw::table::Flag> _badRadiusKey;
 };
 
@@ -187,7 +190,8 @@ struct KronAperture {
     template<typename ImageT>
     static PTR(KronAperture) determine(ImageT const& image, afw::table::SourceRecord const& source,
                                        afw::geom::Point2D const& center,
-                                       double nSigmaForRadius, int nIter
+                                       double nSigmaForRadius, int nIter,
+                                       float *radiusForRadius
                                       );
 
     /// Photometer within the Kron Aperture on an image
@@ -216,15 +220,25 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
                                           afw::table::SourceRecord const& source, // Source with measurements
                                           afw::geom::Point2D const& center, // Centre of source
                                           double nSigmaForRadius,           // Multiplier for Kron radius
-                                          int nIter                         // Number of times to iterate
+                                          int nIter,                        // Number of times to iterate
+                                          float *radiusForRadius            // radius used to estimate radius
     )
 {
     afw::geom::ellipses::Axes axes(source.getShape());
+    afw::geom::ellipses::Axes footprintAxes(source.getFootprint()->getShape());
+    footprintAxes.scale(2);             // <r^2> = 1/2 for a disk
 
     double radius0 = axes.getDeterminantRadius();
+    double const footRadius = footprintAxes.getDeterminantRadius();
+    if (footRadius > radius0*nSigmaForRadius) {
+        radius0 = footRadius/nSigmaForRadius; // we'll scale it up by nSigmaForRadius
+        axes.scale(radius0/axes.getDeterminantRadius());
+    }
     double radius = std::numeric_limits<double>::quiet_NaN();
     for (int i = 0; i < nIter; ++i) {
         axes.scale(nSigmaForRadius);
+        *radiusForRadius = axes.getDeterminantRadius(); // radius we used to estimate R_K
+        
         FootprintFindMoment<ImageT, afwDet::Psf::Image> iRFunctor(
                                                    image, center, axes.getA()/axes.getB(), axes.getTheta()
                                                                  );
@@ -252,9 +266,9 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
         }
         radius0 = radius;
 
-        axes.scale(radius/axes.getDeterminantRadius());
+        axes.scale(radius/axes.getDeterminantRadius()); // set axes to our current estimate of R_K
     }
-    
+
     return boost::make_shared<KronAperture>(
                  center, afw::geom::ellipses::Axes(radius, radius*axes.getB()/axes.getA(), axes.getTheta()));
 }
@@ -297,12 +311,13 @@ void KronFlux::_apply(
     }
     
     CONST_PTR(KronAperture) aperture;
+    float radiusForRadius = std::numeric_limits<double>::quiet_NaN();
     if (ctrl.fixed) {
         aperture.reset(new KronAperture(source));
     } else {
         try {
             aperture = KronAperture::determine(mimage, source, center,
-                                               ctrl.nSigmaForRadius, ctrl.nIterForRadius);
+                                               ctrl.nSigmaForRadius, ctrl.nIterForRadius, &radiusForRadius);
         } catch(pex::exceptions::Exception& e) {
             return;
         }
@@ -313,6 +328,7 @@ void KronFlux::_apply(
     source.set(getKeys().meas, result.first);
     source.set(getKeys().err, result.second);
     source.set(_radiusKey, aperture->getEllipse().getDeterminantRadius());
+    source.set(_radiusForRadiusKey, radiusForRadius);
     source.set(getKeys().flag, false);
 }
 

@@ -164,15 +164,13 @@ class KronPhotometryTestCase(unittest.TestCase):
             shape = source.getShape()
             if True:                    # nsigma*shape, the radius used to estimate R_K
                 shape = shape.clone()
-                shape.scale(nsigma)
-                ds9.dot("@:%f,%f,%f" % (shape.getIxx(), shape.getIxy(), shape.getIyy()), 
-                        xc, yc, ctype=ds9.MAGENTA, frame=ds9Frame)
+                shape.scale(source.get("flux.kron.radiusForRadius")/shape.getDeterminantRadius())
+                ds9.dot(shape, xc, yc, ctype=ds9.MAGENTA, frame=ds9Frame)
             # Show R_K
             shape = shape.clone()
             for r, ct in [(R_K, ds9.BLUE), (R_K*kfac, ds9.CYAN),]:
                 shape.scale(r/shape.getDeterminantRadius())
-                ds9.dot("@:%f,%f,%f" % (shape.getIxx(), shape.getIxy(), shape.getIyy()), 
-                        xc, yc, ctype=ct, frame=ds9Frame)
+                ds9.dot(shape, xc, yc, ctype=ct, frame=ds9Frame)
 
         return R_K, flux_K, fluxErr_K, flags_K
 
