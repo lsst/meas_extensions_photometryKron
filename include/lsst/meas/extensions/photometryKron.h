@@ -20,6 +20,9 @@ public:
                        "Multiplier of rms size for aperture used to initially estimate the Kron radius");
     LSST_CONTROL_FIELD(nIterForRadius, int, "Number of times to iterate when setting the Kron radius");
     LSST_CONTROL_FIELD(nRadiusForFlux, double, "Number of Kron radii for Kron flux");
+    LSST_CONTROL_FIELD(useFootprintRadius, bool,
+                       "Use the Footprint size as part of initial estimate of Kron radius");
+    LSST_CONTROL_FIELD(smoothingSigma, double,
 
     KronFluxControl() : 
         algorithms::FluxControl("flux.kron"), fixed(false),

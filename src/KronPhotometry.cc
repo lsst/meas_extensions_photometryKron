@@ -190,15 +190,14 @@ struct KronAperture {
     template<typename ImageT>
     static PTR(KronAperture) determine(ImageT const& image, afw::table::SourceRecord const& source,
                                        afw::geom::Point2D const& center,
-                                       double nSigmaForRadius, int nIter,
-                                       float *radiusForRadius
+                                       KronFluxControl const& ctrl, float *radiusForRadius
                                       );
 
     /// Photometer within the Kron Aperture on an image
     template<typename ImageT>
     std::pair<double, double> measure(ImageT const& image, // Image to measure
                                       double nRadiusForFlux // Kron radius multiplier
-        ) const;
+                                     ) const;
 
     /// Transform a Kron Aperture to a different frame
     PTR(KronAperture) transform(afw::geom::AffineTransform const& trans) const {
@@ -219,10 +218,9 @@ template<typename ImageT>
 PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measure
                                           afw::table::SourceRecord const& source, // Source with measurements
                                           afw::geom::Point2D const& center, // Centre of source
-                                          double nSigmaForRadius,           // Multiplier for Kron radius
-                                          int nIter,                        // Number of times to iterate
+                                          KronFluxControl const& ctrl,      // control the algorithm
                                           float *radiusForRadius            // radius used to estimate radius
-    )
+                                         )
 {
     afw::geom::ellipses::Axes axes(source.getShape());
     afw::geom::ellipses::Axes footprintAxes(source.getFootprint()->getShape());
@@ -230,13 +228,13 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
 
     double radius0 = axes.getDeterminantRadius();
     double const footRadius = footprintAxes.getDeterminantRadius();
-    if (footRadius > radius0*nSigmaForRadius) {
-        radius0 = footRadius/nSigmaForRadius; // we'll scale it up by nSigmaForRadius
+    if (ctrl.useFootprintRadius && footRadius > radius0*ctrl.nSigmaForRadius) {
+        radius0 = footRadius/ctrl.nSigmaForRadius; // we'll scale it up by nSigmaForRadius
         axes.scale(radius0/axes.getDeterminantRadius());
     }
     double radius = std::numeric_limits<double>::quiet_NaN();
-    for (int i = 0; i < nIter; ++i) {
-        axes.scale(nSigmaForRadius);
+    for (int i = 0; i < ctrl.nIterForRadius; ++i) {
+        axes.scale(ctrl.nSigmaForRadius);
         *radiusForRadius = axes.getDeterminantRadius(); // radius we used to estimate R_K
         
         FootprintFindMoment<ImageT, afwDet::Psf::Image> iRFunctor(
