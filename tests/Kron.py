@@ -98,6 +98,8 @@ class KronPhotometryTestCase(unittest.TestCase):
             Iuu /= I; Ivv /= I
 
             self.objImg = afwImage.makeExposure(afwImage.makeMaskedImage(gal))
+            self.objImg.getMaskedImage().getVariance().setXY0(self.objImg.getXY0()) # workaround #2577
+
             self.objImg.getMaskedImage().getVariance().set(1.0)
 
             if display:
