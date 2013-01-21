@@ -139,6 +139,7 @@ class KronPhotometryTestCase(unittest.TestCase):
         msConfig.algorithms["flux.kron"].nSigmaForRadius = nsigma
         msConfig.algorithms["flux.kron"].nIterForRadius = nIterForRadius
         msConfig.algorithms["flux.kron"].nRadiusForFlux = kfac
+        msConfig.algorithms["flux.kron"].enforceMinimumRadius = False
         schema = afwTable.SourceTable.makeMinimalSchema()
         ms = msConfig.makeMeasureSources(schema)
         
@@ -341,7 +342,7 @@ class KronPhotometryTestCase(unittest.TestCase):
             else:
                 tol = 25*a              # i.e. 0.25*a
         elif b <= 1:
-            tol = 5.0
+            tol = 7.0
         else:
             tol = 1.0
 
