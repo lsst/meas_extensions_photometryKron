@@ -20,6 +20,7 @@
 #include "lsst/meas/algorithms/PSF.h"
 
 #include "lsst/meas/extensions/photometryKron.h"
+#include "lsst/meas/algorithms/ScaledFlux.h"
 
 namespace lsst {
 namespace afwDet = afw::detection;
@@ -35,7 +36,7 @@ namespace {
  *
  * @ingroup meas/algorithms
  */
-class KronFlux : public algorithms::FluxAlgorithm {
+class KronFlux : public algorithms::FluxAlgorithm, public algorithms::ScaledFlux {
 public:
 
     KronFlux(KronFluxControl const & ctrl, afw::table::Schema & schema) :
@@ -44,6 +45,7 @@ public:
             "Kron photometry: photometry with aperture set to some multiple of <radius>"
             "determined within some multiple of the source size"
         ),
+        _fluxCorrectionKeys(ctrl.name, schema),
         _radiusKey(schema.addField<float>(ctrl.name + ".radius", "Kron radius (sqrt(a*b))")),
         _radiusForRadiusKey(schema.addField<float>(ctrl.name + ".radiusForRadius",
                                           "Radius used to estimate <radius> (sqrt(a*b))")),
@@ -51,6 +53,15 @@ public:
         _smallRadiusKey(schema.addField<afw::table::Flag>(ctrl.name + ".flags.smallRadius",
                                                      "Measured Kron radius was smaller than that of the PSF"))
     {}
+
+
+    virtual afw::table::KeyTuple<afw::table::Flux> getFluxKeys(int n=0) const {
+        return FluxAlgorithm::getKeys();
+    }
+
+    virtual algorithms::ScaledFlux::KeyTuple getFluxCorrectionKeys(int n=0) const {
+        return _fluxCorrectionKeys;
+    }
 
 private:
     
@@ -63,6 +74,7 @@ private:
 
     LSST_MEAS_ALGORITHM_PRIVATE_INTERFACE(KronFlux);
 
+    algorithms::ScaledFlux::KeyTuple _fluxCorrectionKeys;
     afw::table::Key<float> _radiusKey;
     afw::table::Key<float> _radiusForRadiusKey;
     afw::table::Key<afw::table::Flag> _badRadiusKey;
@@ -323,6 +335,48 @@ std::pair<double, double> KronAperture::measure(ImageT const& image, // Image of
 }
 
 /************************************************************************************************************/
+/*
+ * Apply the algorithm to the PSF model
+ */
+double
+getPsfFactor(CONST_PTR(afw::detection::Psf) psf,
+             afw::geom::Point2D const& center,
+             double const R_K
+            )
+{
+    typedef afw::detection::Psf::Image PsfImageT;
+    PTR(PsfImageT) psfImage; // the image of the PSF
+
+    if (!psf) {
+        return 1.0;
+    }
+
+    int const pad = 5;
+    try {
+        PTR(PsfImageT) psfImageNoPad = psf->computeImage(center); // Unpadded image of PSF
+        
+        psfImage = PTR(PsfImageT)(
+            new PsfImageT(psfImageNoPad->getDimensions() + afw::geom::Extent2I(2*pad))
+            );
+        afw::geom::BoxI middleBBox(afw::geom::Point2I(pad, pad), psfImageNoPad->getDimensions());
+        
+        PTR(PsfImageT) middle(new PsfImageT(*psfImage, middleBBox, afw::image::LOCAL));
+        *middle <<= *psfImageNoPad;
+    } catch (lsst::pex::exceptions::Exception & e) {
+        LSST_EXCEPT_ADD(e, (boost::format("Computing PSF at (%.3f, %.3f)")
+                            % center.getX() % center.getY()).str());
+        throw e;
+    }
+    // Estimate the GaussianFlux for the Psf
+    int const psfXCen = 0.5*(psfImage->getWidth() - 1); // Center of (21x21) image is (10.0, 10.0)
+    int const psfYCen = 0.5*(psfImage->getHeight() - 1);
+    // Grrr. calculateSincApertureFlux can't handle an Image
+    PTR(afw::image::MaskedImage<PsfImageT::Pixel>) mi(new afw::image::MaskedImage<PsfImageT::Pixel>(psfImage));
+
+    return algorithms::photometry::calculateSincApertureFlux(*mi, psfXCen, psfYCen, 0.0, R_K).first;
+}
+
+/************************************************************************************************************/
 
 template <typename PixelT>
 void KronFlux::_apply(
@@ -367,13 +421,14 @@ void KronFlux::_apply(
      * N.b. we'd really like to specify an aperture based on the Psf's shape (#2563)
      * N.b. computeGaussianWidth is not declared const (#2570)
      */
-    if (ctrl.enforceMinimumRadius && exposure.getPsf()) {
+    double R_K_psf = -1;
+    if (exposure.getPsf()) {
         algorithms::PsfAttributes /* const */ psfAttrs(exposure.getPsf(), source.getX(), source.getY());
-        double const R_K_min = ::sqrt(afw::geom::PI/2)*::hypot(
+        R_K_psf = ::sqrt(afw::geom::PI/2)*::hypot(
                 psfAttrs.computeGaussianWidth(algorithms::PsfAttributes::FIRST_MOMENT),
                 std::max(0.0, ctrl.smoothingSigma));
-        if (rad < R_K_min) {
-            aperture->getEllipse().scale(R_K_min/rad);
+        if (ctrl.enforceMinimumRadius && rad < R_K_psf) {
+            aperture->getEllipse().scale(R_K_psf/rad);
             source.set(_smallRadiusKey, true); // guilty after all
         }
     }
@@ -384,6 +439,13 @@ void KronFlux::_apply(
     source.set(_radiusKey, aperture->getEllipse().getDeterminantRadius());
     source.set(_radiusForRadiusKey, radiusForRadius);
     source.set(getKeys().flag, false);
+    //
+    // Now aperture corrections. Calculate the PSF models' Kron flux, and allow
+    // the aperture correction code to force Kron fluxes to agree with the PSF flux for point sources
+    //
+    double const psfFactor = getPsfFactor(exposure.getPsf(), center, R_K_psf*ctrl.nRadiusForFlux);
+    source.set(_fluxCorrectionKeys.psfFactor, psfFactor);
+    source.set(_fluxCorrectionKeys.psfFactorFlag, false); // i.e. good
 }
 
 LSST_MEAS_ALGORITHM_PRIVATE_IMPLEMENTATION(KronFlux);
