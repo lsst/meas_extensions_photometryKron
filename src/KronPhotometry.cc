@@ -182,16 +182,16 @@ private:
 
 
 struct KronAperture {
-    KronAperture(afwGeom::Point2D const& center, afwEllipse::Axes const& ellipse) :
-        _x(center.getX()), _y(center.getY()), _ellipse(ellipse) {}
+    KronAperture(afwGeom::Point2D const& center, afwEllipse::BaseCore const& core) :
+        _center(center), _axes(core) {}
     explicit KronAperture(afwTable::SourceRecord const& source) :
-        _x(source.getX()), _y(source.getY()),
-        _ellipse(source.getShape()) {}
+        _center(afwGeom::Point2D(source.getX(), source.getY())), _axes(source.getShape()) {}
 
     /// Accessors
-    double getX() const { return _x; }
-    double getY() const { return _y; }
-    afwEllipse::Axes getEllipse() const { return _ellipse; }
+    double getX() const { return _center.getX(); }
+    double getY() const { return _center.getY(); }
+    afwGeom::Point2D const& getCenter() const { return _center; }
+    afwEllipse::Axes const& getAxes() const { return _axes; }
 
     /// Determine the Kron Aperture from an image
     template<typename ImageT>
@@ -211,14 +211,14 @@ struct KronAperture {
 
     /// Transform a Kron Aperture to a different frame
     PTR(KronAperture) transform(afwGeom::AffineTransform const& trans) const {
-        afwGeom::Point2D const center = trans(afwGeom::Point2D(_x, _y));
-        afwEllipse::Axes const ellipse(_ellipse.transform(trans.getLinear()));
-        return boost::make_shared<KronAperture>(center, ellipse);
+        afwGeom::Point2D const center = trans(getCenter());
+        afwEllipse::Axes const axes(getAxes().transform(trans.getLinear()));
+        return boost::make_shared<KronAperture>(center, axes);
     }
 
 private:
-    double _x, _y;                      // Centre
-    afwEllipse::Axes _ellipse;          // Ellipse defining aperture shape
+    afwGeom::Point2D const _center;     // Center of aperture
+    afwEllipse::Axes const _axes;       // Ellipse defining aperture shape
 };
 
 /*
@@ -292,17 +292,16 @@ std::pair<double, double> KronAperture::measure(ImageT const& image, // Image of
                                                 double nRadiusForFlux // Kron radius multiplier
     ) const
 {
+    afwEllipse::Axes axes(getAxes()); // Copy of ellipse core, so we can scale
+    axes.scale(nRadiusForFlux);
     try {
-        double const r2 = nRadiusForFlux * _ellipse.getA() * _ellipse.getA();
-        double const ellip = 1.0 - _ellipse.getB()/_ellipse.getA();
-        return algorithms::photometry::calculateSincApertureFlux(
-            image, _x, _y, 0.0, r2, _ellipse.getTheta(), ellip
-        );
+        return algorithms::photometry::calculateSincApertureFlux(image,
+                                                                 afwEllipse::Ellipse(axes, getCenter()));
     } catch(pexExceptions::LengthErrorException &e) {
         LSST_EXCEPT_ADD(e, (boost::format("Measuring Kron flux for object at (%.3f, %.3f);"
                                           " aperture radius %g,%g theta %g")
-                            % _x % _y % _ellipse.getA() % _ellipse.getB() %
-                            afwGeom::radToDeg(_ellipse.getTheta())).str());
+                            % getX() % getY() % axes.getA() % axes.getB() %
+                            afwGeom::radToDeg(axes.getTheta())).str());
         throw e;
     }
 }
@@ -347,7 +346,7 @@ void KronFlux::_apply(
     std::pair<double, double> result = aperture->measure(mimage, ctrl.nRadiusForFlux);
     source.set(getKeys().meas, result.first);
     source.set(getKeys().err, result.second);
-    source.set(_radiusKey, aperture->getEllipse().getDeterminantRadius());
+    source.set(_radiusKey, aperture->getAxes().getDeterminantRadius());
     source.set(getKeys().flag, false);
 }
 
