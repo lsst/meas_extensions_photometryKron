@@ -120,8 +120,8 @@ class KronPhotometryTestCase(unittest.TestCase):
         #
         FWHM = 5
         ksize = 25                      # size of desired kernel
-        self.objImg.setPsf(afwDetection.createPsf("DoubleGaussian", ksize, ksize,
-                                                  FWHM/(2*math.sqrt(2*math.log(2))), 1, 0.1))
+        self.objImg.setPsf(measAlg.DoubleGaussianPsf(ksize, ksize,
+                                                     FWHM/(2*math.sqrt(2*math.log(2))), 1, 0.1))
 
         return measureKron(self.objImg, xcen, ycen, nsigma, kfac, nIterForRadius)
 
