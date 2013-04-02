@@ -136,6 +136,7 @@ class KronPhotometryTestCase(unittest.TestCase):
             msConfig.slots.centroid = None
 
         msConfig.algorithms.names.add("flux.kron")
+        msConfig.algorithms.names.remove("correctfluxes")
         msConfig.algorithms["flux.kron"].nSigmaForRadius = nsigma
         msConfig.algorithms["flux.kron"].nIterForRadius = nIterForRadius
         msConfig.algorithms["flux.kron"].nRadiusForFlux = kfac
