@@ -23,9 +23,6 @@
 #include "lsst/meas/algorithms/ScaledFlux.h"
 
 namespace lsst {
-namespace afwDet = afw::detection;
-namespace afwEllipses = afw::geom::ellipses;
-
 namespace meas {
 namespace extensions {
 namespace photometryKron {
@@ -84,13 +81,13 @@ private:
 /************************************************************************************************************/
 
 template <typename MaskedImageT, typename WeightImageT>
-class FootprintFindMoment : public afwDet::FootprintFunctor<MaskedImageT> {
+class FootprintFindMoment : public afw::detection::FootprintFunctor<MaskedImageT> {
 public:
     FootprintFindMoment(MaskedImageT const& mimage, ///< The image the source lives in
                         afw::geom::Point2D const& center, // center of the object
                         double const ab,                // axis ratio
                         double const theta // rotation of ellipse +ve from x axis
-                       ) : afwDet::FootprintFunctor<MaskedImageT>(mimage),
+        ) : afw::detection::FootprintFunctor<MaskedImageT>(mimage),
                            _xcen(center.getX()), _ycen(center.getY()),
                            _ab(ab),
                            _cosTheta(::cos(theta)),
@@ -104,7 +101,7 @@ public:
     
     /// @brief Reset everything for a new Footprint
     void reset() {}        
-    void reset(afwDet::Footprint const& foot) {
+    void reset(afw::detection::Footprint const& foot) {
         _sum = _sumR = 0.0;
 #if 0
         _sumVar = _sumRVar = 0.0;
@@ -193,16 +190,16 @@ private:
 
 
 struct KronAperture {
-    KronAperture(afwGeom::Point2D const& center, afwEllipse::BaseCore const& core) :
+    KronAperture(afw::geom::Point2D const& center, afw::geom::ellipses::BaseCore const& core) :
         _center(center), _axes(core) {}
-    explicit KronAperture(afwTable::SourceRecord const& source) :
-        _center(afwGeom::Point2D(source.getX(), source.getY())), _axes(source.getShape()) {}
+    explicit KronAperture(afw::table::SourceRecord const& source) :
+        _center(afw::geom::Point2D(source.getX(), source.getY())), _axes(source.getShape()) {}
 
     /// Accessors
     double getX() const { return _center.getX(); }
     double getY() const { return _center.getY(); }
-    afwGeom::Point2D const& getCenter() const { return _center; }
-    afwEllipse::Axes const& getAxes() const { return _axes; }
+    afw::geom::Point2D const& getCenter() const { return _center; }
+    afw::geom::ellipses::Axes getAxes() const { return _axes; }
 
     /// Determine the Kron Aperture from an image
     template<typename ImageT>
@@ -218,15 +215,15 @@ struct KronAperture {
                                      ) const;
 
     /// Transform a Kron Aperture to a different frame
-    PTR(KronAperture) transform(afwGeom::AffineTransform const& trans) const {
-        afwGeom::Point2D const center = trans(getCenter());
-        afwEllipse::Axes const axes(getAxes().transform(trans.getLinear()));
+    PTR(KronAperture) transform(afw::geom::AffineTransform const& trans) const {
+        afw::geom::Point2D const center = trans(getCenter());
+        afw::geom::ellipses::Axes const axes(getAxes().transform(trans.getLinear()));
         return boost::make_shared<KronAperture>(center, axes);
     }
 
 private:
-    afwGeom::Point2D const _center;     // Center of aperture
-    afwEllipse::Axes const _axes;       // Ellipse defining aperture shape
+    afw::geom::Point2D const _center;     // Center of aperture
+    afw::geom::ellipses::Axes const _axes;       // Ellipse defining aperture shape
 };
 
 /*
@@ -270,7 +267,7 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
         //
         // Build an elliptical Footprint of the proper size
         //
-        afwDet::Footprint foot(afw::geom::ellipses::Ellipse(axes, center));
+        afw::detection::Footprint foot(afw::geom::ellipses::Ellipse(axes, center));
         afw::geom::Box2I bbox = !smoothImage ?
             foot.getBBox() :
             kernel.growBBox(foot.getBBox()); // the smallest bbox needed to convolve with Kernel
@@ -282,7 +279,7 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
         //
         // Find the desired first moment
         //
-        FootprintFindMoment<ImageT, afwDet::Psf::Image> iRFunctor(
+        FootprintFindMoment<ImageT, afw::detection::Psf::Image> iRFunctor(
                                                     subImage, center, axes.getA()/axes.getB(), axes.getTheta()
                                                                  );
 
@@ -319,16 +316,17 @@ std::pair<double, double> KronAperture::measure(ImageT const& image, // Image of
                                                 double nRadiusForFlux // Kron radius multiplier
                                                ) const
 {
-    afwEllipse::Axes axes(getAxes()); // Copy of ellipse core, so we can scale
+    afw::geom::ellipses::Axes axes(getAxes()); // Copy of ellipse core, so we can scale
     axes.scale(nRadiusForFlux);
     try {
-        return algorithms::photometry::calculateSincApertureFlux(image,
-                                                                 afwEllipse::Ellipse(axes, getCenter()));
+        return algorithms::photometry::calculateSincApertureFlux(
+            image, afw::geom::ellipses::Ellipse(axes, getCenter())
+            );
     } catch(pex::exceptions::LengthErrorException &e) {
         LSST_EXCEPT_ADD(e, (boost::format("Measuring Kron flux for object at (%.3f, %.3f);"
                                           " aperture radius %g,%g theta %g")
                             % getX() % getY() % axes.getA() % axes.getB() %
-                            afwGeom::radToDeg(axes.getTheta())).str());
+                            afw::geom::radToDeg(axes.getTheta())).str());
         throw e;
     }
 }
@@ -371,8 +369,10 @@ getPsfFactor(CONST_PTR(afw::detection::Psf) psf,
     int const psfYCen = 0.5*(psfImage->getHeight() - 1);
     // Grrr. calculateSincApertureFlux can't handle an Image
     PTR(afw::image::MaskedImage<PsfImageT::Pixel>) mi(new afw::image::MaskedImage<PsfImageT::Pixel>(psfImage));
+    afw::geom::ellipses::Ellipse aperture(afw::geom::ellipses::Axes(R_K, R_K),
+                                          afw::geom::Point2D(psfXCen, psfYCen));
 
-    return algorithms::photometry::calculateSincApertureFlux(*mi, psfXCen, psfYCen, 0.0, R_K).first;
+    return algorithms::photometry::calculateSincApertureFlux(*mi, aperture).first;
 }
 
 /************************************************************************************************************/
@@ -405,7 +405,7 @@ void KronFlux::_apply(
     }
     source.set(_badRadiusKey, false);
 
-    double const rad = aperture->getEllipse().getDeterminantRadius();
+    double const rad = aperture->getAxes().getDeterminantRadius();
     if (ctrl.enforceMinimumRadius && rad < std::numeric_limits<double>::epsilon()) {
         if (!exposure.getPsf()) {       // no minimum radius is available
             throw LSST_EXCEPT(lsst::pex::exceptions::UnderflowErrorException,
@@ -427,7 +427,7 @@ void KronFlux::_apply(
                 psfAttrs.computeGaussianWidth(algorithms::PsfAttributes::FIRST_MOMENT),
                 std::max(0.0, ctrl.smoothingSigma));
         if (ctrl.enforceMinimumRadius && rad < R_K_psf) {
-            aperture->getEllipse().scale(R_K_psf/rad);
+            aperture->getAxes().scale(R_K_psf/rad);
             source.set(_smallRadiusKey, true); // guilty after all
         }
     }
