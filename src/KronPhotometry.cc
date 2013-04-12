@@ -292,12 +292,11 @@ std::pair<double, double> KronAperture::measure(ImageT const& image, // Image of
                                                 double nRadiusForFlux // Kron radius multiplier
     ) const
 {
+    afwEllipse::Axes axes(_ellipse);    // Copy of ellipse core, so we can scale
+    axes.scale(nRadiusForFlux);
     try {
-        double const r2 = nRadiusForFlux * _ellipse.getA() * _ellipse.getA();
-        double const ellip = 1.0 - _ellipse.getB()/_ellipse.getA();
         return algorithms::photometry::calculateSincApertureFlux(
-            image, _x, _y, 0.0, r2, _ellipse.getTheta(), ellip
-        );
+                                         image, afw::geom::ellipses::Ellipse(axes, afwGeom::Point2D(_x, _y)));
     } catch(pexExceptions::LengthErrorException &e) {
         LSST_EXCEPT_ADD(e, (boost::format("Measuring Kron flux for object at (%.3f, %.3f);"
                                           " aperture radius %g,%g theta %g")
