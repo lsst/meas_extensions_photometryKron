@@ -28,6 +28,41 @@ namespace extensions {
 namespace photometryKron {
 namespace {
 
+template <typename MaskedImageT>
+        class FootprintFlux : public afw::detection::FootprintFunctor<MaskedImageT> {
+public:
+    explicit FootprintFlux(MaskedImageT const& mimage ///< The image the source lives in
+                          ) : afw::detection::FootprintFunctor<MaskedImageT>(mimage),
+                     _sum(0.0), _sumVar(0.0) {}
+
+    /// @brief Reset everything for a new Footprint
+    void reset() {
+        _sum = _sumVar = 0.0;
+    }
+    void reset(afw::detection::Footprint const&) {}        
+
+    /// @brief method called for each pixel by apply()
+    void operator()(typename MaskedImageT::xy_locator loc, ///< locator pointing at the pixel
+                    int,                                   ///< column-position of pixel
+                    int                                    ///< row-position of pixel
+                   ) {
+        typename MaskedImageT::Image::Pixel ival = loc.image(0, 0);
+        typename MaskedImageT::Variance::Pixel vval = loc.variance(0, 0);
+        _sum += ival;
+        _sumVar += vval;
+    }
+
+    /// Return the Footprint's flux
+    double getSum() const { return _sum; }
+
+    /// Return the variance of the Footprint's flux
+    double getSumVar() const { return _sumVar; }
+
+private:
+    double _sum;
+    double _sumVar;
+};
+
 /**
  * @brief A class that knows how to calculate fluxes using the KRON photometry algorithm
  *
@@ -211,7 +246,8 @@ struct KronAperture {
     /// Photometer within the Kron Aperture on an image
     template<typename ImageT>
     std::pair<double, double> measure(ImageT const& image, // Image to measure
-                                      double nRadiusForFlux // Kron radius multiplier
+                                      double const nRadiusForFlux, // Kron radius multiplier
+                                      double const maxSincRadius // largest radius that we use sinc apertyres
                                      ) const;
 
     /// Transform a Kron Aperture to a different frame
@@ -313,15 +349,24 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
 
 template<typename ImageT>
 std::pair<double, double> KronAperture::measure(ImageT const& image, // Image of interest
-                                                double nRadiusForFlux // Kron radius multiplier
+                                                double const nRadiusForFlux, // Kron radius multiplier
+                                                double const maxSincRadius // largest radius that we use sinc
+                                                                           // apertures to measure
                                                ) const
 {
     afw::geom::ellipses::Axes axes(getAxes()); // Copy of ellipse core, so we can scale
     axes.scale(nRadiusForFlux);
+    afw::geom::ellipses::Ellipse const ellip(axes, getCenter());
+
+    if (axes.getB() > 10) {
+        FootprintFlux<ImageT> fluxFunctor(image);
+        afw::detection::Footprint const foot(ellip, image.getBBox());
+        fluxFunctor.apply(foot);
+
+        return std::make_pair(fluxFunctor.getSum(), ::sqrt(fluxFunctor.getSumVar()));
+    }
     try {
-        return algorithms::photometry::calculateSincApertureFlux(
-            image, afw::geom::ellipses::Ellipse(axes, getCenter())
-            );
+        return algorithms::photometry::calculateSincApertureFlux(image, ellip);
     } catch(pex::exceptions::LengthErrorException &e) {
         LSST_EXCEPT_ADD(e, (boost::format("Measuring Kron flux for object at (%.3f, %.3f);"
                                           " aperture radius %g,%g theta %g")
@@ -432,7 +477,7 @@ void KronFlux::_apply(
         }
     }
 
-    std::pair<double, double> result = aperture->measure(mimage, ctrl.nRadiusForFlux);
+    std::pair<double, double> result = aperture->measure(mimage, ctrl.nRadiusForFlux, ctrl.maxSincRadius);
     source.set(getKeys().meas, result.first);
     source.set(getKeys().err, result.second);
     source.set(_radiusKey, aperture->getAxes().getDeterminantRadius());

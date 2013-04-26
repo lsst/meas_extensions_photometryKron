@@ -20,6 +20,8 @@ public:
                        "Multiplier of rms size for aperture used to initially estimate the Kron radius");
     LSST_CONTROL_FIELD(nIterForRadius, int, "Number of times to iterate when setting the Kron radius");
     LSST_CONTROL_FIELD(nRadiusForFlux, double, "Number of Kron radii for Kron flux");
+    LSST_CONTROL_FIELD(maxSincRadius, double,
+                       "Largest aperture for which to use the slow, accurate, sinc aperture code");
     LSST_CONTROL_FIELD(minimumRadius, double,
                        "Minimum Kron radius (if == 0.0 use PSF's Kron radius). "
                        "Ignored if enforceMinimumRadius is false");
@@ -34,6 +36,7 @@ public:
         nSigmaForRadius(6.0),
         nIterForRadius(1),
         nRadiusForFlux(2.5),
+        maxSincRadius(10.0),
         minimumRadius(0.0),
         enforceMinimumRadius(true),
         useFootprintRadius(false),
