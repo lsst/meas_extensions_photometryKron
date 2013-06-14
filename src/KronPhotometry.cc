@@ -577,7 +577,7 @@ void KronFlux::_applyForced(
 {
     source.set(getKeys().flag, true); // bad unless we get all the way to success at the end
     KronFluxControl const& ctrl = static_cast<KronFluxControl const &>(this->getControl());
-    double const radius = reference.get(reference.getSchema().find<double>(ctrl.name + ".radius").key);
+    float const radius = reference.get(reference.getSchema().find<float>(ctrl.name + ".radius").key);
     KronAperture const aperture(reference, refToMeas, radius);
     _applyAperture(source, exposure, aperture);
     source.set(getKeys().flag, false);
