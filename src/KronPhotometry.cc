@@ -507,10 +507,25 @@ void KronFlux::_applyAperture(
      */
     double R_K_psf = -1;
     if (exposure.getPsf()) {
-        algorithms::PsfAttributes /* const */ psfAttrs(exposure.getPsf(), source.getX(), source.getY());
-        R_K_psf = ::sqrt(afw::geom::PI/2)*::hypot(
-                psfAttrs.computeGaussianWidth(algorithms::PsfAttributes::FIRST_MOMENT),
-                std::max(0.0, ctrl.smoothingSigma));
+        double irSum = 0, iSum = 0;
+        typedef afw::detection::Psf::Image Image;
+        CONST_PTR(Image) image = exposure.getPsf()->computeImage(aperture.getCenter());
+        double const xCen = aperture.getX(), yCen = aperture.getY();
+        int const x0 = image->getX0(), y0 = image->getY0();
+        for (int y = 0; y != image->getHeight(); ++y) {
+            double const dy = y + y0 - yCen;
+            double const dy2 = dy*dy;
+            Image::x_iterator iter = image->row_begin(y), end = image->row_end(y);
+            for (int x = 0; iter != end; ++iter, ++x) {
+                double const dx = x + x0 - xCen;
+                double const r = std::sqrt(dx*dx + dy2);
+                double const f = *iter;
+                irSum += f*r;
+                iSum += f;
+            }
+        }
+        double const moment = irSum/iSum;
+        R_K_psf = ::sqrt(afw::geom::PI/2)*::hypot(moment, std::max(0.0, ctrl.smoothingSigma));
         if (ctrl.enforceMinimumRadius && rad < R_K_psf) {
             aperture.getAxes().scale(R_K_psf/rad);
             source.set(_smallRadiusKey, true); // guilty after all
