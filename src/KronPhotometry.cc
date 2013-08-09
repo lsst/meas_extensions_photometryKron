@@ -403,7 +403,7 @@ std::pair<double, double> photometer(
     afw::geom::ellipses::Axes const& axes = aperture.getCore();
     if (axes.getB() > maxSincRadius) {
         FootprintFlux<ImageT> fluxFunctor(image);
-        afw::detection::Footprint const foot(aperture, image.getBBox());
+        afw::detection::Footprint const foot(aperture, image.getBBox(afw::image::PARENT));
         fluxFunctor.apply(foot);
 
         return std::make_pair(fluxFunctor.getSum(), ::sqrt(fluxFunctor.getSumVar()));
