@@ -166,7 +166,7 @@ public:
 
         if (x0 < _imageX0 || y0 < _imageY0 ||
             x1 >= _imageX0 + mimage.getWidth() || y1 >= _imageY0 + mimage.getHeight()) {
-            throw LSST_EXCEPT(lsst::pex::exceptions::OutOfRangeException,
+            throw LSST_EXCEPT(lsst::pex::exceptions::OutOfRangeError,
                               (boost::format("Footprint %d,%d--%d,%d doesn't fit in image %d,%d--%d,%d")
                                % x0 % y0 % x1 % y1
                                % _imageX0 % _imageY0
@@ -366,7 +366,7 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
 
         try {
             iRFunctor.apply(foot);
-        } catch(lsst::pex::exceptions::OutOfRangeException &e) {
+        } catch(lsst::pex::exceptions::OutOfRangeError &e) {
             if (i == 0) {
                 LSST_EXCEPT_ADD(e, "Determining Kron aperture");
             }
@@ -374,7 +374,7 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
         }
         
         if (!iRFunctor.getGood()) {
-            throw LSST_EXCEPT(lsst::pex::exceptions::RuntimeErrorException,
+            throw LSST_EXCEPT(lsst::pex::exceptions::RuntimeError,
                               "Bad footprint when determining Kron aperture");
         }
         
@@ -410,7 +410,7 @@ std::pair<double, double> photometer(
     }
     try {
         return algorithms::photometry::calculateSincApertureFlux(image, aperture);
-    } catch(pex::exceptions::LengthErrorException &e) {
+    } catch(pex::exceptions::LengthError &e) {
         LSST_EXCEPT_ADD(e, (boost::format("Measuring Kron flux for object at (%.3f, %.3f);"
                                           " aperture radius %g,%g theta %g")
                             % aperture.getCenter().getX() % aperture.getCenter().getY()
@@ -493,7 +493,7 @@ void KronFlux::_applyAperture(
     double const rad = aperture.getAxes().getDeterminantRadius();
     if (ctrl.enforceMinimumRadius && rad < std::numeric_limits<double>::epsilon()) {
         if (!exposure.getPsf()) {       // no minimum radius is available
-            throw LSST_EXCEPT(lsst::pex::exceptions::UnderflowErrorException,
+            throw LSST_EXCEPT(lsst::pex::exceptions::UnderflowError,
                               str(boost::format("Kron radius is < epsilon for source %ld")
                                   % source.getId()));
         }
