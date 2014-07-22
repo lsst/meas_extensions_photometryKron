@@ -20,6 +20,7 @@ import lsst.afw.geom as afwGeom
 import lsst.afw.geom.ellipses as afwEllipses
 import lsst.afw.math as afwMath
 import lsst.afw.table as afwTable
+import lsst.afw.coord as afwCoord
 import lsst.afw.image as afwImage
 import lsst.meas.algorithms as measAlg
 import lsst.meas.extensions.photometryKron as Kron
@@ -37,7 +38,7 @@ import lsst.afw.display.utils as displayUtils
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
-class KronPhotometryTestCase(unittest.TestCase):
+class KronPhotometryTestCase(tests.TestCase):
     """A test case for measuring Kron quantities"""
 
     def setUp(self):
@@ -101,6 +102,8 @@ class KronPhotometryTestCase(unittest.TestCase):
             self.objImg.getMaskedImage().getVariance().setXY0(self.objImg.getXY0()) # workaround #2577
 
             self.objImg.getMaskedImage().getVariance().set(1.0)
+            self.objImg.setWcs(afwImage.makeWcs(afwCoord.Coord(0.0*afwGeom.degrees, 0.0*afwGeom.degrees),
+                                                afwGeom.Point2D(0.0, 0.0), 1.0e-4, 0.0, 0.0, 1.0e-4))
 
             if display:
                 ds9.mtv(self.objImg, frame=ds9Frame, title="%g %g" % (a, b))
@@ -159,7 +162,21 @@ class KronPhotometryTestCase(unittest.TestCase):
         flux_K = source.get("flux.kron")
         fluxErr_K = source.get("flux.kron.err")
         flags_K = source.get("flux.kron.flags")
-        
+
+        if not flags_K:
+            # Forced measurement on the same image should produce exactly the same result
+            forcedSchema = afwTable.SourceTable.makeMinimalSchema()
+            forcedMs = msConfig.makeMeasureSources(forcedSchema, isForced=True)
+            forcedTable = afwTable.SourceTable.make(forcedSchema)
+            forced = forcedTable.makeRecord()
+            forcedMs.applyForced(forced, self.objImg, source, self.objImg.getWcs())
+            for field in ("flux.kron", "flux.kron.err", "flux.kron.radius", "flux.kron.flags"):
+                print field, source.get(field), forced.get(field)
+                if np.isnan(source.get(field)):
+                    self.assertTrue(np.isnan(forced.get(field)))
+                else:
+                    self.assertClose(source.get(field), forced.get(field), rtol=1.0e-6, atol=None)
+
         if display:
             xc, yc = xcen - objImg.getX0(), ycen - objImg.getY0()
             ds9.dot("x", xc, yc, ctype=ds9.MAGENTA, size=1, frame=ds9Frame)
