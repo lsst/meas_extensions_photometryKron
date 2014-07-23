@@ -512,4 +512,11 @@ def run(exit = False):
     tests.run(suite(), exit)
 
 if __name__ == "__main__":
+    from argparse import ArgumentParser
+    parser = ArgumentParser()
+    parser.add_argument("--display", default=False, action="store_true", help="Activate display?")
+    parser.add_argument("--verbose", type=int, default=0, help="Verbosity level")
+    args = parser.parse_args()
+    display = args.display
+    verbose = args.verbose
     run(True)
