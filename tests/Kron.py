@@ -319,8 +319,6 @@ class KronPhotometryTestCase(unittest.TestCase):
                                         (ID, flux_K, flux_truth,
                                          100*(flux_K/flux_truth - 1), self.getTolFlux(a, b, kfac),
                                          " *" if failFlux else "")
-                                    if True:
-                                        continue # skip tests
 
                                 self.assertFalse(failR, (("%s  R_Kron: %g v. exact value %g " +
                                                           "(error %.3f pixels; limit %.3f)") % \
