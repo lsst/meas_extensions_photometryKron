@@ -11,6 +11,7 @@ or
 
 import math, os, sys, unittest
 import numpy as np
+import itertools
 import lsst.utils.tests as tests
 import lsst.pex.exceptions as pexExceptions
 import lsst.pex.logging as pexLogging
@@ -38,6 +39,92 @@ import lsst.afw.display.utils as displayUtils
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
+def makeGalaxy(width, height, flux, a, b, theta, dx=0.0, dy=0.0, xy0=None):
+    """Make a fake galaxy image"""
+    gal = afwImage.ImageF(width, height)
+    xcen, ycen = 0.5*width + dx, 0.5*height + dy
+    I0 = flux/(2*math.pi*a*b)
+
+    if xy0 is not None:
+        gal.setXY0(xy0)
+
+    c, s = math.cos(math.radians(theta)), math.sin(math.radians(theta))
+    I, Iuu, Ivv = 0.0, 0.0, 0.0
+    for y in range(height):
+        for x in range(width):
+            dx, dy = x + gal.getX0() - xcen, y + gal.getY0() - ycen
+            if math.hypot(dx, dy) < 10.5:
+                nsample = float(5)
+                subZ = np.linspace(-0.5*(1 - 1/nsample), 0.5*(1 - 1/nsample), nsample)
+            else:
+                nsample = 1
+                subZ = [0.0]
+
+            val = 0
+            for sx in subZ:
+                for sy in subZ:
+                    u =  c*(dx + sx) + s*(dy + sy)
+                    v = -s*(dx + sx) + c*(dy + sy)
+                    val += I0*math.exp(-0.5*((u/a)**2 + (v/b)**2))
+
+            if val < 0:
+                val = 0
+            gal.set(x, y, val/nsample**2)
+
+            I += val
+            Iuu += val*u**2
+            Ivv += val*v**2
+
+    Iuu /= I; Ivv /= I
+
+    exp = afwImage.makeExposure(afwImage.makeMaskedImage(gal))
+    exp.getMaskedImage().getVariance().setXY0(exp.getXY0()) # workaround #2577
+    exp.getMaskedImage().getVariance().set(1.0)
+    exp.setWcs(afwImage.makeWcs(afwCoord.Coord(0.0*afwGeom.degrees, 0.0*afwGeom.degrees),
+                                afwGeom.Point2D(0.0, 0.0), 1.0e-4, 0.0, 0.0, 1.0e-4))
+    return exp
+
+def makeSourceMeasurementConfig(nsigma=6.0, nIterForRadius=1, kfac=2.5):
+    """Construct a SourceMeasurementConfig with the requested parameters"""
+    msConfig = measAlg.SourceMeasurementConfig()
+    if False:                       # requires #2546
+        msConfig.centroider = None
+        msConfig.slots.centroid = None
+    msConfig.algorithms.names.add("flux.kron")
+    msConfig.algorithms.names.remove("correctfluxes")
+    msConfig.algorithms["flux.kron"].nSigmaForRadius = nsigma
+    msConfig.algorithms["flux.kron"].nIterForRadius = nIterForRadius
+    msConfig.algorithms["flux.kron"].nRadiusForFlux = kfac
+    msConfig.algorithms["flux.kron"].enforceMinimumRadius = False
+    return msConfig
+
+def measureFree(exposure, center, msConfig):
+    """Unforced measurement"""
+    schema = afwTable.SourceTable.makeMinimalSchema()
+    ms = msConfig.makeMeasureSources(schema)
+
+    table = afwTable.SourceTable.make(schema)
+    msConfig.slots.setupTable(table)
+    source = table.makeRecord()
+
+    ss = afwDetection.FootprintSet(exposure.getMaskedImage(), afwDetection.Threshold(0.1))
+    fp = ss.getFootprints()[0]
+    source.setFootprint(fp)
+
+    ms.apply(source, exposure, center)
+
+    return source
+
+def measureForced(exposure, refSource, refWcs, msConfig):
+    """Forced measurement"""
+    schema = afwTable.SourceTable.makeMinimalSchema()
+    ms = msConfig.makeMeasureSources(schema, isForced=True)
+    forcedTable = afwTable.SourceTable.make(schema)
+    forced = forcedTable.makeRecord()
+    ms.applyForced(forced, exposure, refSource, refWcs)
+    return forced
+
+
 class KronPhotometryTestCase(tests.TestCase):
     """A test case for measuring Kron quantities"""
 
@@ -61,49 +148,12 @@ class KronPhotometryTestCase(tests.TestCase):
         if a < b:
             a, b = b, a
             theta += 90
-        I0 = self.flux/(2*math.pi*a*b)
 
         if makeImage:
             self.objImg = None
         if not self.objImg:
-            gal = afwImage.ImageF(self.width, self.height)
-            gal.setXY0(10, 10)
-
-            c, s = math.cos(math.radians(theta)), math.sin(math.radians(theta))
-            I, Iuu, Ivv = 0.0, 0.0, 0.0
-            for y in range(self.height):
-                for x in range(self.width):
-                    dx, dy = x + gal.getX0() - xcen, y + gal.getY0() - ycen
-                    if math.hypot(dx, dy) < 10.5:
-                        nsample = float(5)
-                        subZ = np.linspace(-0.5*(1 - 1/nsample), 0.5*(1 - 1/nsample), nsample)
-                    else:
-                        nsample = 1
-                        subZ = [0.0]
-
-                    val = 0
-                    for sx in subZ:
-                        for sy in subZ:
-                            u =  c*(dx + sx) + s*(dy + sy)
-                            v = -s*(dx + sx) + c*(dy + sy)
-                            val += I0*math.exp(-0.5*((u/a)**2 + (v/b)**2))
-
-                    if val < 0:
-                        val = 0
-                    gal.set(x, y, val/nsample**2)
-
-                    I += val
-                    Iuu += val*u**2
-                    Ivv += val*v**2
-
-            Iuu /= I; Ivv /= I
-
-            self.objImg = afwImage.makeExposure(afwImage.makeMaskedImage(gal))
-            self.objImg.getMaskedImage().getVariance().setXY0(self.objImg.getXY0()) # workaround #2577
-
-            self.objImg.getMaskedImage().getVariance().set(1.0)
-            self.objImg.setWcs(afwImage.makeWcs(afwCoord.Coord(0.0*afwGeom.degrees, 0.0*afwGeom.degrees),
-                                                afwGeom.Point2D(0.0, 0.0), 1.0e-4, 0.0, 0.0, 1.0e-4))
+            self.objImg = makeGalaxy(self.width, self.height, self.flux, a, b, theta, dx, dy,
+                                     afwGeom.Point2I(10, 10))
 
             if display:
                 ds9.mtv(self.objImg, frame=ds9Frame, title="%g %g" % (a, b))
@@ -133,30 +183,9 @@ class KronPhotometryTestCase(tests.TestCase):
         #
         # Now measure things
         #
-        msConfig = measAlg.SourceMeasurementConfig()
-        if False:                       # requires #2546
-            msConfig.centroider = None
-            msConfig.slots.centroid = None
-
-        msConfig.algorithms.names.add("flux.kron")
-        msConfig.algorithms.names.remove("correctfluxes")
-        msConfig.algorithms["flux.kron"].nSigmaForRadius = nsigma
-        msConfig.algorithms["flux.kron"].nIterForRadius = nIterForRadius
-        msConfig.algorithms["flux.kron"].nRadiusForFlux = kfac
-        msConfig.algorithms["flux.kron"].enforceMinimumRadius = False
-        schema = afwTable.SourceTable.makeMinimalSchema()
-        ms = msConfig.makeMeasureSources(schema)
-        
-        table = afwTable.SourceTable.make(schema)
-        msConfig.slots.setupTable(table)
-        source = table.makeRecord()
-
-        ss = afwDetection.FootprintSet(objImg.getMaskedImage(), afwDetection.Threshold(0.1))
-        fp = ss.getFootprints()[0]
-        source.setFootprint(fp)
-
         center = afwGeom.Point2D(xcen, ycen)
-        ms.apply(source, objImg, center)
+        msConfig = makeSourceMeasurementConfig(nsigma, nIterForRadius, kfac)
+        source = measureFree(objImg, center, msConfig)
 
         R_K = source.get("flux.kron.radius")
         flux_K = source.get("flux.kron")
@@ -165,17 +194,16 @@ class KronPhotometryTestCase(tests.TestCase):
 
         if not flags_K:
             # Forced measurement on the same image should produce exactly the same result
-            forcedSchema = afwTable.SourceTable.makeMinimalSchema()
-            forcedMs = msConfig.makeMeasureSources(forcedSchema, isForced=True)
-            forcedTable = afwTable.SourceTable.make(forcedSchema)
-            forced = forcedTable.makeRecord()
-            forcedMs.applyForced(forced, self.objImg, source, self.objImg.getWcs())
+            forced = measureForced(objImg, source, objImg.getWcs(), msConfig)
             for field in ("flux.kron", "flux.kron.err", "flux.kron.radius", "flux.kron.flags"):
-                print field, source.get(field), forced.get(field)
-                if np.isnan(source.get(field)):
-                    self.assertTrue(np.isnan(forced.get(field)))
-                else:
-                    self.assertClose(source.get(field), forced.get(field), rtol=1.0e-6, atol=None)
+                try:
+                    if np.isnan(source.get(field)):
+                        self.assertTrue(np.isnan(forced.get(field)))
+                    else:
+                        self.assertClose(source.get(field), forced.get(field), rtol=1.0e-6, atol=None)
+                except AssertionError:
+                    print "Failed:", field, source.get(field), forced.get(field)
+                    raise
 
         if display:
             xc, yc = xcen - objImg.getX0(), ycen - objImg.getY0()
@@ -403,6 +431,70 @@ class KronPhotometryTestCase(tests.TestCase):
             tol = 0.30
 
         return tol
+
+
+    def testForced(self):
+        """Check that forced photometry works in the presence of rotations and translations"""
+        kfac = 2.5
+        msConfig = makeSourceMeasurementConfig(kfac=kfac)
+        warper = afwMath.Warper("lanczos4")
+        a = 13
+        for axisRatio in (0.25, 1.0):
+            b = a*axisRatio
+            for theta in (0, 30, 45):
+                width, height = 256, 256
+                center = afwGeom.Point2D(0.5*width, 0.5*height)
+                original = makeGalaxy(width, height, 1000.0, a, b, theta)
+                source = measureFree(original, center, msConfig)
+                if source.get("flux.kron.flags"):
+                    continue
+
+                angleList = [45, 90,]
+                scaleList = [1.0, 0.5]
+                offsetList = [(1.23, 4.56), (12.3, 45.6)]
+
+                for angle, scale, offset in itertools.product(angleList, scaleList, offsetList):
+                    cosAngle = math.cos(math.radians(angle))
+                    sinAngle = math.sin(math.radians(angle))
+                    dx, dy = offset
+                    pixelScale = original.getWcs().pixelScale().asDegrees()*scale
+                    wcs = afwImage.makeWcs(afwCoord.Coord(0.0*afwGeom.degrees, 0.0*afwGeom.degrees),
+                                           afwGeom.Point2D(dx, dy), pixelScale*cosAngle,
+                                           pixelScale*sinAngle, -pixelScale*sinAngle, pixelScale*cosAngle)
+
+                    warped = warper.warpExposure(wcs, original)
+                    forced = measureForced(warped, source, original.getWcs(), msConfig)
+
+                    if display:
+                        ds9.mtv(original, frame=1)
+                        shape = source.getShape().clone()
+                        xc, yc = source.getCentroid()
+                        radius = source.get("flux.kron.radius")
+                        for r, ct in [(radius, ds9.BLUE), (radius*kfac, ds9.CYAN),]:
+                            shape.scale(r/shape.getDeterminantRadius())
+                            ds9.dot(shape, xc, yc, ctype=ct, frame=1)
+                        ds9.mtv(warped, frame=2)
+                        transform = (wcs.linearizeSkyToPixel(source.getCoord())*
+                                     original.getWcs().linearizePixelToSky(source.getCoord()))
+                        shape = shape.transform(transform.getLinear())
+                        radius = forced.get("flux.kron.radius")
+                        xc, yc = wcs.skyToPixel(source.getCoord()) - afwGeom.Extent2D(warped.getXY0())
+                        for r, ct in [(radius, ds9.BLUE), (radius*kfac, ds9.CYAN),]:
+                            shape.scale(r/shape.getDeterminantRadius())
+                            ds9.dot(shape, xc, yc, ctype=ct, frame=2)
+
+                    try:
+                        self.assertClose(source.get("flux.kron"), forced.get("flux.kron"),
+                                         rtol=2.0e-4, atol=None)
+                        self.assertClose(source.get("flux.kron.radius"), scale*forced.get("flux.kron.radius"),
+                                         rtol=None, atol=1.0e-12)
+                        self.assertEqual(source.get("flux.kron.flags"), forced.get("flux.kron.flags"))
+                    except:
+                        print ("Failed:", angle, scale, offset,
+                               [(source.get(f), forced.get(f)) for f in
+                                ("flux.kron", "flux.kron.radius", "flux.kron.flags")])
+                        raise
+
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
