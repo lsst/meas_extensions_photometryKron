@@ -301,9 +301,9 @@ afw::geom::ellipses::Axes KronAperture::_getKronAxes(
     double const radius
     )
 {
-    afw::geom::ellipses::Axes axes(shape.transform(transformation));
+    afw::geom::ellipses::Axes axes(shape);
     axes.scale(radius/axes.getDeterminantRadius());
-    return axes;
+    return axes.transform(transformation);
 }
 
 
