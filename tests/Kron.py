@@ -306,6 +306,8 @@ class KronPhotometryTestCase(tests.TestCase):
 
     def testEllipticalGaussian(self):
         """Test measuring the Kron quantities of an elliptical Gaussian"""
+
+        ignoreTestFailures = False      # if True, keep going after test failures but always generate a failure
         #
         # Choose function that does the measuring
         #
@@ -365,6 +367,9 @@ class KronPhotometryTestCase(tests.TestCase):
                                          100*(flux_K/flux_truth - 1), self.getTolFlux(a, b, kfac),
                                          " *" if failFlux else "")
 
+                                if ignoreTestFailures:
+                                    continue
+
                                 self.assertFalse(failR, (("%s  R_Kron: %g v. exact value %g " +
                                                           "(error %.3f pixels; limit %.3f)") % \
                                                              (ID, R_K, R_truth, (R_K - R_truth),
@@ -374,6 +379,8 @@ class KronPhotometryTestCase(tests.TestCase):
                                                              "(error %.2f%% limit %.2f%%)") %
                                                             (ID, flux_K, flux_truth, 100*(flux_K/flux_truth-1),
                                                              self.getTolFlux(a, b, kfac))))
+
+        self.assertFalse(ignoreTestFailures, "You are ignoring possible test failures")
 
     def getTolRad(self, a, b):
         """Return R_K tolerance in hundredths of a pixel"""
