@@ -342,7 +342,8 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
     //
     afw::geom::ellipses::Axes axes(source.getShape());
     afw::geom::ellipses::Axes footprintAxes(source.getFootprint()->getShape());
-    footprintAxes.scale(2);             // <r^2> = 1/2 for a disk
+    footprintAxes.scale(::sqrt(2));     // if the Footprint's a disk of radius R we want footRadius == R.
+                                        // As <r^2> = R^2/2 for a disk, we need to scale up by sqrt(2)
 
     double radius0 = axes.getDeterminantRadius();
     double const footRadius = footprintAxes.getDeterminantRadius();
