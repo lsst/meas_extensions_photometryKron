@@ -39,10 +39,13 @@ import lsst.afw.display.utils as displayUtils
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
-def makeGalaxy(width, height, flux, a, b, theta, dx=0.0, dy=0.0, xy0=None):
+def makeGalaxy(width, height, flux, a, b, theta, dx=0.0, dy=0.0, xy0=None, xcen=None, ycen=None):
     """Make a fake galaxy image"""
     gal = afwImage.ImageF(width, height)
-    xcen, ycen = 0.5*width + dx, 0.5*height + dy
+    if xcen is None:
+        xcen = 0.5*width + dx
+    if ycen is None:
+        ycen = 0.5*height + dy
     I0 = flux/(2*math.pi*a*b)
 
     if xy0 is not None:
@@ -138,10 +141,14 @@ class KronPhotometryTestCase(tests.TestCase):
             del self.objImg
 
     def makeAndMeasure(self, measureKron, a, b, theta, dx=0.0, dy=0.0, nsigma=6, kfac=2, nIterForRadius=1,
+                       xcen=None, ycen=None,
                        makeImage=True):
         """Make and measure an elliptical Gaussian"""
 
-        xcen, ycen = 0.5*self.width + dx, 0.5*self.height + dy
+        if xcen is None:
+            xcen = 0.5*self.width + dx
+        if ycen is None:
+            ycen = 0.5*self.height + dy
         #
         # Make the object
         #
@@ -149,25 +156,29 @@ class KronPhotometryTestCase(tests.TestCase):
             a, b = b, a
             theta += 90
 
+        if self.objImg is None:
+            makeImage = True
         if makeImage:
-            self.objImg = None
-        if not self.objImg:
             self.objImg = makeGalaxy(self.width, self.height, self.flux, a, b, theta, dx, dy,
-                                     afwGeom.Point2I(10, 10))
+                                     afwGeom.Point2I(10, 10), xcen=xcen, ycen=ycen)
 
             if display:
                 ds9.mtv(self.objImg, frame=ds9Frame, title="%g %g" % (a, b))
 
-                ds9.dot("+", xcen - self.objImg.getX0(), ycen - self.objImg.getY0(),
-                        size=1, ctype=ds9.RED, frame=ds9Frame)
-                ds9.pan(xcen - self.objImg.getX0(), ycen - self.objImg.getY0(), frame=ds9Frame)
-                c, s = math.cos(math.radians(theta)), math.sin(math.radians(theta))
-                # N.b. add 1/12 in quadrature to allow for pixellisation
-                ds9.dot("@:%f,%f,%f" % (nsigma**2*((a**2 + 1/12.0)*c**2 + (b**2 + 1/12.0)*s**2),
-                                        nsigma**2*(a**2 - b**2)*c*s,
-                                        nsigma**2*((a**2 + 1/12.0)*s**2 + (b**2 + 1/12.0)*c**2)),
-                        xcen - self.objImg.getX0(), ycen - self.objImg.getY0(),
-                        size=1, ctype=ds9.RED, frame=ds9Frame, silent=True)
+        if display:
+            if not makeImage:
+                ds9.erase(frame=ds9Frame)
+
+            ds9.dot("+", xcen - self.objImg.getX0(), ycen - self.objImg.getY0(),
+                    size=1, ctype=ds9.RED, frame=ds9Frame)
+            ds9.pan(xcen - self.objImg.getX0(), ycen - self.objImg.getY0(), frame=ds9Frame)
+            c, s = math.cos(math.radians(theta)), math.sin(math.radians(theta))
+            # N.b. add 1/12 in quadrature to allow for pixellisation
+            ds9.dot("@:%f,%f,%f" % (nsigma**2*((a**2 + 1/12.0)*c**2 + (b**2 + 1/12.0)*s**2),
+                                    nsigma**2*(a**2 - b**2)*c*s,
+                                    nsigma**2*((a**2 + 1/12.0)*s**2 + (b**2 + 1/12.0)*c**2)),
+                    xcen - self.objImg.getX0(), ycen - self.objImg.getY0(),
+                    size=1, ctype=ds9.RED, frame=ds9Frame, silent=True)
         #
         # Do the measuring
         #
@@ -208,7 +219,7 @@ class KronPhotometryTestCase(tests.TestCase):
         if display:
             xc, yc = xcen - objImg.getX0(), ycen - objImg.getY0()
             ds9.dot("x", xc, yc, ctype=ds9.MAGENTA, size=1, frame=ds9Frame)
-            displayUtils.drawFootprint(fp, XY0=objImg.getXY0())
+            displayUtils.drawFootprint(source.getFootprint(), XY0=objImg.getXY0())
 
             shape = source.getShape()
             if True:                    # nsigma*shape, the radius used to estimate R_K
@@ -221,7 +232,8 @@ class KronPhotometryTestCase(tests.TestCase):
                 shape.scale(r/shape.getDeterminantRadius())
                 ds9.dot(shape, xc, yc, ctype=ct, frame=ds9Frame)
 
-        return R_K, flux_K, fluxErr_K, flags_K
+        return R_K, flux_K, fluxErr_K, flags_K, \
+            source.get("flux.kron.flags.radius"), source.get("flux.kron.flags.smallRadius")
 
     def measureKronInPython(self, objImg, xcen, ycen, nsigma, kfac, nIterForRadius, makeImage=None):
         """Measure the Kron quantities of an elliptical Gaussian in python
@@ -302,7 +314,7 @@ class KronPhotometryTestCase(tests.TestCase):
                 if math.hypot(u/a, v/b) < kfac:
                     sumI += gal.get(x, y)
 
-        return R_K, sumI, 0, False
+        return R_K, sumI, 0, False, False, False
 
     def testEllipticalGaussian(self):
         """Test measuring the Kron quantities of an elliptical Gaussian"""
@@ -333,10 +345,13 @@ class KronPhotometryTestCase(tests.TestCase):
 
                             makeImage = True
                             for kfac in (1.5, 2.5,):        # multiple of R_Kron to use for Flux_Kron
-                                R_K, flux_K, fluxErr_K, flags_K = \
+                                R_K, flux_K, fluxErr_K, flags_K, flags_radius, flags_smallRadius = \
                                     self.makeAndMeasure(measureKron, a, b, theta, dx=dx, dy=dy, kfac=kfac,
                                                         nIterForRadius=nIter, makeImage=makeImage)
                                 makeImage = False
+
+                                self.assertFalse(flags_radius)
+                                self.assertFalse(flags_smallRadius)
                                 #
                                 # We'll have to correct for the pixelisation as we sum over the central
                                 # few pixels when making models, mostly do deal with b ~ 0.5 models.
@@ -381,6 +396,28 @@ class KronPhotometryTestCase(tests.TestCase):
                                                              self.getTolFlux(a, b, kfac))))
 
         self.assertFalse(ignoreTestFailures, "You are ignoring possible test failures")
+
+    def testBadFlags(self):
+        a, b, theta = 5, 1, 20.0
+        #
+        # Check that we fail if too close to the edge of the image
+        #
+        for cen in (10, 20, 38, 40, 50, self.width - 10):
+            makeImage = True
+            for kfac in (2.5, 10,):
+                R_K, flux_K, fluxErr_K, flags_K, flags_radius, flags_smallRadius = \
+                    self.makeAndMeasure(self.measureKron, a, b, theta, makeImage=makeImage,
+                                        xcen=cen, ycen=cen, kfac=kfac)
+                makeImage = False
+
+                msg = "flux.kron.flags.radius: cen = (%g, %g), kfac = %g" % (cen, cen, kfac)
+
+                if kfac == 2.5 and (cen <= 20 or cen > self.width - 20):
+                    self.assertTrue(flags_radius, msg)
+                elif kfac == 10:
+                    self.assertTrue(flags_radius, msg)
+                else:
+                    self.assertFalse(flags_radius, msg)
 
     def getTolRad(self, a, b):
         """Return R_K tolerance in hundredths of a pixel"""
@@ -438,7 +475,6 @@ class KronPhotometryTestCase(tests.TestCase):
             tol = 0.30
 
         return tol
-
 
     def testForced(self):
         """Check that forced photometry works in the presence of rotations and translations"""

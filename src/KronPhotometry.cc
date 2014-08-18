@@ -83,7 +83,8 @@ public:
         _radiusKey(schema.addField<float>(ctrl.name + ".radius", "Kron radius (sqrt(a*b))")),
         _radiusForRadiusKey(schema.addField<float>(ctrl.name + ".radiusForRadius",
                                           "Radius used to estimate <radius> (sqrt(a*b))")),
-        _badRadiusKey(schema.addField<afw::table::Flag>(ctrl.name + ".flags.radius", "Bad Kron radius")),
+        _badRadiusKey(schema.addField<afw::table::Flag>(ctrl.name + ".flags.radius",
+                                                        "Bad Kron radius (too close to edge to measure R_K)")),
         _smallRadiusKey(schema.addField<afw::table::Flag>(ctrl.name + ".flags.smallRadius",
                                                      "Measured Kron radius was smaller than that of the PSF"))
     {}
@@ -496,7 +497,7 @@ void KronFlux::_applyAperture(
 {
     KronFluxControl const& ctrl = static_cast<KronFluxControl const&>(this->getControl());
 
-    source.set(_badRadiusKey, false);
+    source.set(_badRadiusKey, true);    // guilty until proven innocent
 
     double const rad = aperture.getAxes().getDeterminantRadius();
     if (ctrl.enforceMinimumRadius && rad < std::numeric_limits<double>::epsilon()) {
@@ -545,17 +546,8 @@ void KronFlux::_applyAperture(
     source.set(getKeys().meas, result.first);
     source.set(getKeys().err, result.second);
     source.set(_radiusKey, aperture.getAxes().getDeterminantRadius());
-    //
-    // Now aperture corrections. Calculate the PSF models' Kron flux, and allow
-    // the aperture correction code to force Kron fluxes to agree with the PSF flux for point sources
-    //
-    double const psfFactor = getPsfFactor(exposure.getPsf(), aperture.getCenter(),
-                                          R_K_psf*ctrl.nRadiusForFlux, ctrl.maxSincRadius);
-    source.set(_fluxCorrectionKeys.psfFactor, psfFactor);
-    source.set(_fluxCorrectionKeys.psfFactorFlag, false); // i.e. good
+    source.set(_badRadiusKey, false);
 }
-
-
 
 template <typename PixelT>
 void KronFlux::_apply(
@@ -564,6 +556,9 @@ void KronFlux::_apply(
                       afw::geom::Point2D const & center
                      ) const {
     source.set(getKeys().flag, true); // bad unless we get all the way to success at the end
+    source.set(_badRadiusKey, true);  // guilty until proven innocent
+    source.set(_smallRadiusKey, false); // innocent until proven guilty
+
     afw::image::MaskedImage<PixelT> const& mimage = exposure.getMaskedImage();
 
     KronFluxControl const & ctrl = static_cast<KronFluxControl const &>(this->getControl());
