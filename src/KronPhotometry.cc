@@ -352,7 +352,7 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
         afw::geom::Box2I bbox = !smoothImage ?
             foot.getBBox() :
             kernel.growBBox(foot.getBBox()); // the smallest bbox needed to convolve with Kernel
-        bbox.clip(image.getBBox(afw::image::PARENT));
+        bbox.clip(image.getBBox());
         ImageT subImage(image, bbox, afw::image::PARENT, smoothImage);
         if (smoothImage) {
             afw::math::convolve(subImage, ImageT(image, bbox, afw::image::PARENT, false), kernel, convCtrl);
@@ -403,7 +403,7 @@ std::pair<double, double> photometer(
     afw::geom::ellipses::Axes const& axes = aperture.getCore();
     if (axes.getB() > maxSincRadius) {
         FootprintFlux<ImageT> fluxFunctor(image);
-        afw::detection::Footprint const foot(aperture, image.getBBox(afw::image::PARENT));
+        afw::detection::Footprint const foot(aperture, image.getBBox());
         fluxFunctor.apply(foot);
 
         return std::make_pair(fluxFunctor.getSum(), ::sqrt(fluxFunctor.getSumVar()));
