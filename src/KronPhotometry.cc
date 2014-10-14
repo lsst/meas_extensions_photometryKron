@@ -430,6 +430,34 @@ std::pair<double, double> photometer(
     }
 }
 
+
+double calculatePsfKronRadius(
+    CONST_PTR(afw::detection::Psf) const& psf, // PSF to measure
+    afw::geom::Point2D const& center, // Centroid of source on parent image
+    double smoothingSigma=0.0         // Gaussian sigma of smoothing applied
+    )
+{
+    typedef afw::detection::Psf::Image Image;
+    double irSum = 0, iSum = 0;
+    CONST_PTR(Image) image = psf->computeImage(center);
+    double const xCen = center.getX(), yCen = center.getY();
+    int const x0 = image->getX0(), y0 = image->getY0();
+    for (int y = 0; y != image->getHeight(); ++y) {
+        double const dy = y + y0 - yCen;
+        double const dy2 = dy*dy;
+        Image::x_iterator iter = image->row_begin(y), end = image->row_end(y);
+        for (int x = 0; iter != end; ++iter, ++x) {
+            double const dx = x + x0 - xCen;
+            double const r = std::sqrt(dx*dx + dy2);
+            double const f = *iter;
+            irSum += f*r;
+            iSum += f;
+        }
+    }
+    double const moment = irSum/iSum;
+    return ::sqrt(afw::geom::PI/2)*::hypot(moment, std::max(0.0, smoothingSigma));
+}
+
 template<typename ImageT>
 std::pair<double, double> KronAperture::measure(ImageT const& image, // Image of interest
                                                 double const nRadiusForFlux, // Kron radius multiplier
@@ -502,52 +530,15 @@ void KronFlux::_applyAperture(
     source.set(_badRadiusKey, true);    // guilty until proven innocent
 
     double const rad = aperture.getAxes().getDeterminantRadius();
-    if (ctrl.enforceMinimumRadius && rad < std::numeric_limits<double>::epsilon()) {
-        if (!exposure.getPsf()) {       // no minimum radius is available
-            throw LSST_EXCEPT(lsst::pex::exceptions::UnderflowError,
-                              str(boost::format("Kron radius is < epsilon for source %ld")
-                                  % source.getId()));
-        }
-    }
-    source.set(_smallRadiusKey, false); // innocent until proven guilty
-    /*
-     * Estimate the minimum acceptable Kron radius as the Kron radius of the PSF
-     *
-     * N.b. we'd really like to specify an aperture based on the Psf's shape (#2563)
-     * N.b. computeGaussianWidth is not declared const (#2570)
-     */
-    double R_K_psf = -1;
-    if (exposure.getPsf()) {
-        double irSum = 0, iSum = 0;
-        typedef afw::detection::Psf::Image Image;
-        CONST_PTR(Image) image = exposure.getPsf()->computeImage(aperture.getCenter());
-        double const xCen = aperture.getX(), yCen = aperture.getY();
-        int const x0 = image->getX0(), y0 = image->getY0();
-        for (int y = 0; y != image->getHeight(); ++y) {
-            double const dy = y + y0 - yCen;
-            double const dy2 = dy*dy;
-            Image::x_iterator iter = image->row_begin(y), end = image->row_end(y);
-            for (int x = 0; iter != end; ++iter, ++x) {
-                double const dx = x + x0 - xCen;
-                double const r = std::sqrt(dx*dx + dy2);
-                double const f = *iter;
-                irSum += f*r;
-                iSum += f;
-            }
-        }
-        double const moment = irSum/iSum;
-        R_K_psf = ::sqrt(afw::geom::PI/2)*::hypot(moment, std::max(0.0, ctrl.smoothingSigma));
-        if (ctrl.enforceMinimumRadius && rad < R_K_psf) {
-            aperture.getAxes().scale(R_K_psf/rad);
-            source.set(_smallRadiusKey, true); // guilty after all
-        }
+    if (rad < std::numeric_limits<double>::epsilon()) {
+        throw LSST_EXCEPT(lsst::pex::exceptions::UnderflowError,
+                          str(boost::format("Kron radius is < epsilon for source %ld") % source.getId()));
     }
 
     std::pair<double, double> result = aperture.measure(exposure.getMaskedImage(), ctrl.nRadiusForFlux,
                                                         ctrl.maxSincRadius);
     source.set(getKeys().meas, result.first);
     source.set(getKeys().err, result.second);
-    source.set(_psfRadiusKey, R_K_psf);
     source.set(_radiusKey, aperture.getAxes().getDeterminantRadius());
     source.set(_badRadiusKey, false);
 }
@@ -582,8 +573,40 @@ void KronFlux::_apply(
         }
     }
 
+    /*
+     * Estimate the minimum acceptable Kron radius as the Kron radius of the PSF
+     *
+     * N.b. we'd really like to specify an aperture based on the Psf's shape (#2563)
+     * N.b. computeGaussianWidth is not declared const (#2570)
+     */
+    double R_K_psf = -1;
+    if (exposure.getPsf()) {
+        R_K_psf = calculatePsfKronRadius(exposure.getPsf(), center, ctrl.smoothingSigma);
+    }
+
+    // Enforce constraints on minimum radius
+    double rad = aperture->getAxes().getDeterminantRadius();
+    if (ctrl.enforceMinimumRadius) {
+        double newRadius = rad;
+        if (ctrl.minimumRadius > 0.0) {
+            if (rad < ctrl.minimumRadius) {
+                newRadius = ctrl.minimumRadius;
+            }
+        } else if (!exposure.getPsf()) {
+            throw LSST_EXCEPT(lsst::pex::exceptions::RuntimeErrorException,
+                              "No minimum radius and no PSF provided");
+        } else if (rad < R_K_psf) {
+            newRadius = R_K_psf;
+        }
+        if (newRadius != rad) {
+            aperture->getAxes().scale(newRadius/rad);
+            source.set(_smallRadiusKey, true); // guilty after all
+        }
+    }
+
     _applyAperture(source, exposure, *aperture);
     source.set(_radiusForRadiusKey, radiusForRadius);
+    source.set(_psfRadiusKey, R_K_psf);
     source.set(getKeys().flag, false);
 }
 
@@ -601,6 +624,9 @@ void KronFlux::_applyForced(
     float const radius = reference.get(reference.getSchema().find<float>(ctrl.name + ".radius").key);
     KronAperture const aperture(reference, refToMeas, radius);
     _applyAperture(source, exposure, aperture);
+    if (exposure.getPsf()) {
+        source.set(_psfRadiusKey, calculatePsfKronRadius(exposure.getPsf(), center, ctrl.smoothingSigma));
+    }
     source.set(getKeys().flag, false);
 }
 
