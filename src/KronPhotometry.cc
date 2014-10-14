@@ -270,7 +270,8 @@ struct KronAperture {
     double getX() const { return _center.getX(); }
     double getY() const { return _center.getY(); }
     afw::geom::Point2D const& getCenter() const { return _center; }
-    afw::geom::ellipses::Axes getAxes() const { return _axes; }
+    afw::geom::ellipses::Axes & getAxes() { return _axes; }
+    afw::geom::ellipses::Axes const& getAxes() const { return _axes; }
 
     /// Determine the Kron Aperture from an image
     template<typename ImageT>
@@ -289,7 +290,7 @@ struct KronAperture {
     /// Transform a Kron Aperture to a different frame
     PTR(KronAperture) transform(afw::geom::AffineTransform const& trans) const {
         afw::geom::Point2D const center = trans(getCenter());
-        afw::geom::ellipses::Axes const axes(getAxes().transform(trans.getLinear()));
+        afw::geom::ellipses::Axes const axes(*getAxes().transform(trans.getLinear()).copy());
         return boost::make_shared<KronAperture>(center, axes);
     }
 
@@ -303,7 +304,7 @@ private:
         );
 
     afw::geom::Point2D const _center;     // Center of aperture
-    afw::geom::ellipses::Axes const _axes;       // Ellipse defining aperture shape
+    afw::geom::ellipses::Axes _axes;      // Ellipse defining aperture shape
 };
 
 
