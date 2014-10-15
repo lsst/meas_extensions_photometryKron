@@ -528,10 +528,9 @@ void KronFlux::_applyAperture(
 {
     KronFluxControl const& ctrl = static_cast<KronFluxControl const&>(this->getControl());
 
-    source.set(_badRadiusKey, true);    // guilty until proven innocent
-
     double const rad = aperture.getAxes().getDeterminantRadius();
     if (rad < std::numeric_limits<double>::epsilon()) {
+        source.set(_badRadiusKey, true);
         throw LSST_EXCEPT(lsst::pex::exceptions::UnderflowError,
                           str(boost::format("Kron radius is < epsilon for source %ld") % source.getId()));
     }
@@ -551,7 +550,7 @@ void KronFlux::_apply(
                       afw::geom::Point2D const & center
                      ) const {
     source.set(getKeys().flag, true); // bad unless we get all the way to success at the end
-    source.set(_badRadiusKey, true);  // guilty until proven innocent
+    source.set(_badRadiusKey, false);  // innocent until proven guilty
     source.set(_smallRadiusKey, false); // innocent until proven guilty
 
     afw::image::MaskedImage<PixelT> const& mimage = exposure.getMaskedImage();
@@ -559,6 +558,7 @@ void KronFlux::_apply(
     KronFluxControl const & ctrl = static_cast<KronFluxControl const &>(this->getControl());
 
     if (source.getShapeFlag()) {        // the shape's bad; give up now
+        source.set(_badRadiusKey, true);
         return;
     }
 
