@@ -456,7 +456,8 @@ double calculatePsfKronRadius(
         }
     }
     double const moment = irSum/iSum;
-    return ::sqrt(afw::geom::PI/2)*::hypot(moment, std::max(0.0, smoothingSigma));
+    // For a Gaussian N(0, sigma^2), the Kron radius is sqrt(pi/2)*sigma
+    return ::hypot(moment, std::max(0.0, ::sqrt(afw::geom::PI/2)*smoothingSigma));
 }
 
 template<typename ImageT>
