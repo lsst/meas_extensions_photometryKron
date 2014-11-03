@@ -438,26 +438,10 @@ double calculatePsfKronRadius(
     double smoothingSigma=0.0         // Gaussian sigma of smoothing applied
     )
 {
-    typedef afw::detection::Psf::Image Image;
-    double irSum = 0, iSum = 0;
-    CONST_PTR(Image) image = psf->computeImage(center);
-    double const xCen = center.getX(), yCen = center.getY();
-    int const x0 = image->getX0(), y0 = image->getY0();
-    for (int y = 0; y != image->getHeight(); ++y) {
-        double const dy = y + y0 - yCen;
-        double const dy2 = dy*dy;
-        Image::x_iterator iter = image->row_begin(y), end = image->row_end(y);
-        for (int x = 0; iter != end; ++iter, ++x) {
-            double const dx = x + x0 - xCen;
-            double const r = std::sqrt(dx*dx + dy2);
-            double const f = *iter;
-            irSum += f*r;
-            iSum += f;
-        }
-    }
-    double const moment = irSum/iSum;
+    assert(psf);
+    double const radius = psf->computeShape(center).getDeterminantRadius();
     // For a Gaussian N(0, sigma^2), the Kron radius is sqrt(pi/2)*sigma
-    return ::hypot(moment, std::max(0.0, ::sqrt(afw::geom::PI/2)*smoothingSigma));
+    return ::sqrt(afw::geom::PI/2)*::hypot(radius, std::max(0.0, smoothingSigma));
 }
 
 template<typename ImageT>
@@ -577,9 +561,6 @@ void KronFlux::_apply(
 
     /*
      * Estimate the minimum acceptable Kron radius as the Kron radius of the PSF
-     *
-     * N.b. we'd really like to specify an aperture based on the Psf's shape (#2563)
-     * N.b. computeGaussianWidth is not declared const (#2570)
      */
     double R_K_psf = -1;
     if (exposure.getPsf()) {
