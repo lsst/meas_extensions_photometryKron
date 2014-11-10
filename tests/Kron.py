@@ -413,11 +413,11 @@ class KronPhotometryTestCase(tests.TestCase):
                 msg = "flux.kron.flags.radius: cen = (%g, %g), kfac = %g" % (cen, cen, kfac)
 
                 if kfac == 2.5 and (cen <= 20 or cen > self.width - 20):
-                    self.assertTrue(flags_radius, msg)
+                    self.assertTrue(flags_K, msg)
                 elif kfac == 10:
-                    self.assertTrue(flags_radius, msg)
+                    self.assertTrue(flags_K, msg)
                 else:
-                    self.assertFalse(flags_radius, msg)
+                    self.assertFalse(flags_K, msg)
 
     def getTolRad(self, a, b):
         """Return R_K tolerance in hundredths of a pixel"""
