@@ -84,9 +84,13 @@ public:
         _radiusForRadiusKey(schema.addField<float>(ctrl.name + ".radiusForRadius",
                                           "Radius used to estimate <radius> (sqrt(a*b))")),
         _badRadiusKey(schema.addField<afw::table::Flag>(ctrl.name + ".flags.radius",
-                                                        "Bad Kron radius (too close to edge to measure R_K)")),
+                                                        "Bad Kron radius")),
         _smallRadiusKey(schema.addField<afw::table::Flag>(ctrl.name + ".flags.smallRadius",
                                                      "Measured Kron radius was smaller than that of the PSF")),
+        _usedMinimumRadiusKey(schema.addField<afw::table::Flag>(ctrl.name + ".flags.usedMinimumRadius",
+                                                             "Used the minimum radius for the Kron aperture")),
+        _usedPsfRadiusKey(schema.addField<afw::table::Flag>(ctrl.name + ".flags.usedPsfRadius",
+                                                            "Used the PSF Kron radius for the Kron aperture")),
         _psfRadiusKey(schema.addField<float>(ctrl.name + ".psfRadius", "Radius of PSF")),
         _badShapeKey(schema.addField<afw::table::Flag>(ctrl.name + ".flags.badShape",
                                                     "Shape for measuring Kron radius is bad; used PSF shape"))
@@ -133,6 +137,8 @@ private:
     afw::table::Key<float> _radiusForRadiusKey;
     afw::table::Key<afw::table::Flag> _badRadiusKey;
     afw::table::Key<afw::table::Flag> _smallRadiusKey;
+    afw::table::Key<afw::table::Flag> _usedMinimumRadiusKey;
+    afw::table::Key<afw::table::Flag> _usedPsfRadiusKey;
     afw::table::Key<float> _psfRadiusKey;
     afw::table::Key<afw::table::Flag> _badShapeKey;
 };
@@ -516,7 +522,6 @@ void KronFlux::_applyAperture(
     source.set(getKeys().meas, result.first);
     source.set(getKeys().err, result.second);
     source.set(_radiusKey, aperture.getAxes().getDeterminantRadius());
-    source.set(_badRadiusKey, false);
 }
 
 template <typename PixelT>
@@ -529,6 +534,8 @@ void KronFlux::_apply(
     source.set(_badRadiusKey, false);  // innocent until proven guilty
     source.set(_smallRadiusKey, false); // innocent until proven guilty
     source.set(_badShapeKey, false); // innocent until proven guilty
+    source.set(_usedMinimumRadiusKey, false);
+    source.set(_usedPsfRadiusKey, false);
 
     afw::image::MaskedImage<PixelT> const& mimage = exposure.getMaskedImage();
 
@@ -575,12 +582,29 @@ void KronFlux::_apply(
         try {
             aperture = KronAperture::determine(mimage, axes, center, ctrl, &radiusForRadius);
         } catch(pex::exceptions::Exception& e) {
-            return;
+            //
+            // Kron aperture calculation failed
+            // Use minimumRadius if defined; otherwise use PSF Kron radius.
+            //
+            source.set(_badRadiusKey, true);
+            double newRadius;
+            if (ctrl.minimumRadius > 0) {
+                newRadius = ctrl.minimumRadius;
+                source.set(_usedMinimumRadiusKey, true);
+            } else if (R_K_psf > 0) {
+                newRadius = R_K_psf;
+                source.set(_usedPsfRadiusKey, true);
+            } else {
+                LSST_EXCEPT_ADD(e, "Bad Kron aperture, no minimum radius specified, and no PSF");
+                throw e;
+            }
+            aperture.reset(new KronAperture(source));
+            aperture->getAxes().scale(newRadius/aperture->getAxes().getDeterminantRadius());
         }
     }
 
     /*
-     * Estimate the minimum acceptable Kron radius as the Kron radius of the PSF
+     * Estimate the minimum acceptable Kron radius as the Kron radius of the PSF or the provided minimum radius
      */
 
     // Enforce constraints on minimum radius
@@ -590,12 +614,14 @@ void KronFlux::_apply(
         if (ctrl.minimumRadius > 0.0) {
             if (rad < ctrl.minimumRadius) {
                 newRadius = ctrl.minimumRadius;
+                source.set(_usedMinimumRadiusKey, true);
             }
         } else if (!exposure.getPsf()) {
             throw LSST_EXCEPT(lsst::pex::exceptions::RuntimeErrorException,
                               "No minimum radius and no PSF provided");
         } else if (rad < R_K_psf) {
             newRadius = R_K_psf;
+            source.set(_usedPsfRadiusKey, true);
         }
         if (newRadius != rad) {
             aperture->getAxes().scale(newRadius/rad);

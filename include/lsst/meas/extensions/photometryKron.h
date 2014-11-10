@@ -23,8 +23,8 @@ public:
     LSST_CONTROL_FIELD(maxSincRadius, double,
                        "Largest aperture for which to use the slow, accurate, sinc aperture code");
     LSST_CONTROL_FIELD(minimumRadius, double,
-                       "Minimum Kron radius (if == 0.0 use PSF's Kron radius). "
-                       "Ignored if enforceMinimumRadius is false");
+                       "Minimum Kron radius (if == 0.0 use PSF's Kron radius) if enforceMinimumRadius. "
+                       "Also functions as fallback aperture radius if set.");
     LSST_CONTROL_FIELD(enforceMinimumRadius, bool, "If true check that the Kron radius exceeds some minimum");
     LSST_CONTROL_FIELD(useFootprintRadius, bool,
                        "Use the Footprint size as part of initial estimate of Kron radius");
