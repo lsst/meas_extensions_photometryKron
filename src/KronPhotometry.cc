@@ -26,6 +26,10 @@ namespace lsst {
 namespace meas {
 namespace extensions {
 namespace photometryKron {
+
+LSST_EXCEPTION_TYPE(BadKronException, pex::exceptions::RuntimeError,
+                    lsst::meas::extensions::photometryKron::BadKronException);
+
 namespace {
 
 template <typename MaskedImageT>
@@ -129,6 +133,17 @@ private:
         afw::table::SourceRecord const & reference,
         afw::geom::AffineTransform const & refToMeas
     ) const;
+
+    // Provide a KronAperture for when the regular aperture fails
+    //
+    // Essentially this is an error handler that provides a fallback if possible,
+    // or re-throws the exception.
+    //
+    // The fallback aperture uses the minimumRadius if defined; otherwise uses the PSF Kron radius.
+    PTR(KronAperture) _fallbackRadius(afw::table::SourceRecord& source, // Source, to set flags
+                                      double const R_K_psf,             // Kron radius of PSF
+                                      pex::exceptions::Exception& exc   // Exception to re-throw, if required
+        ) const;
 
     LSST_MEAS_ALGORITHM_PRIVATE_INTERFACE(KronFlux);
 
@@ -385,8 +400,7 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
         }
         
         if (!iRFunctor.getGood()) {
-            throw LSST_EXCEPT(lsst::pex::exceptions::RuntimeError,
-                              "Bad footprint when determining Kron aperture");
+            throw LSST_EXCEPT(BadKronException, "Bad integral defining Kron radius");
         }
         
         radius = iRFunctor.getIr()*sqrt(axes.getB()/axes.getA());
@@ -537,6 +551,10 @@ void KronFlux::_apply(
     source.set(_usedMinimumRadiusKey, false);
     source.set(_usedPsfRadiusKey, false);
 
+    // Did we hit a condition that fundamentally prevented measuring the Kron flux?
+    // Such conditions include hitting the edge of the image and bad input shape, but not low signal-to-noise.
+    bool bad = false;
+
     afw::image::MaskedImage<PixelT> const& mimage = exposure.getMaskedImage();
 
     KronFluxControl const & ctrl = static_cast<KronFluxControl const &>(this->getControl());
@@ -553,6 +571,7 @@ void KronFlux::_apply(
     if (!source.getShapeFlag()) {
         axes = source.getShape();
     } else {
+        bad = true;
         if (!exposure.getPsf()) {
             throw LSST_EXCEPT(pex::exceptions::RuntimeError, "Bad shape and no PSF");
         }
@@ -581,25 +600,12 @@ void KronFlux::_apply(
     } else {
         try {
             aperture = KronAperture::determine(mimage, axes, center, ctrl, &radiusForRadius);
+        } catch (BadKronException& e) {
+            // Not setting bad=true because we only failed due to low S/N
+            aperture = _fallbackRadius(source, R_K_psf, e);
         } catch(pex::exceptions::Exception& e) {
-            //
-            // Kron aperture calculation failed
-            // Use minimumRadius if defined; otherwise use PSF Kron radius.
-            //
-            source.set(_badRadiusKey, true);
-            double newRadius;
-            if (ctrl.minimumRadius > 0) {
-                newRadius = ctrl.minimumRadius;
-                source.set(_usedMinimumRadiusKey, true);
-            } else if (R_K_psf > 0) {
-                newRadius = R_K_psf;
-                source.set(_usedPsfRadiusKey, true);
-            } else {
-                LSST_EXCEPT_ADD(e, "Bad Kron aperture, no minimum radius specified, and no PSF");
-                throw e;
-            }
-            aperture.reset(new KronAperture(source));
-            aperture->getAxes().scale(newRadius/aperture->getAxes().getDeterminantRadius());
+            bad = true; // There's something fundamental keeping us from measuring the Kron aperture
+            aperture = _fallbackRadius(source, R_K_psf, e);
         }
     }
 
@@ -632,7 +638,7 @@ void KronFlux::_apply(
     _applyAperture(source, exposure, *aperture);
     source.set(_radiusForRadiusKey, radiusForRadius);
     source.set(_psfRadiusKey, R_K_psf);
-    source.set(getKeys().flag, false);
+    source.set(getKeys().flag, bad);
 }
 
 template <typename PixelT>
@@ -654,6 +660,29 @@ void KronFlux::_applyForced(
     }
     source.set(getKeys().flag, false);
 }
+
+
+PTR(KronAperture) KronFlux::_fallbackRadius(afw::table::SourceRecord& source, double const R_K_psf,
+                                            pex::exceptions::Exception& exc) const
+{
+    KronFluxControl const & ctrl = static_cast<KronFluxControl const &>(this->getControl());
+    source.set(_badRadiusKey, true);
+    double newRadius;
+    if (ctrl.minimumRadius > 0) {
+        newRadius = ctrl.minimumRadius;
+        source.set(_usedMinimumRadiusKey, true);
+    } else if (R_K_psf > 0) {
+        newRadius = R_K_psf;
+        source.set(_usedPsfRadiusKey, true);
+    } else {
+        LSST_EXCEPT_ADD(exc, "Bad Kron aperture, no minimum radius specified, and no PSF");
+        throw exc;
+    }
+    PTR(KronAperture) aperture(new KronAperture(source));
+    aperture->getAxes().scale(newRadius/aperture->getAxes().getDeterminantRadius());
+    return aperture;
+}
+
 
 
 LSST_MEAS_ALGORITHM_PRIVATE_IMPLEMENTATION(KronFlux);
