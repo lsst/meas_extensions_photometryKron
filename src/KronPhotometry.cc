@@ -87,6 +87,8 @@ public:
         _radiusKey(schema.addField<float>(ctrl.name + ".radius", "Kron radius (sqrt(a*b))")),
         _radiusForRadiusKey(schema.addField<float>(ctrl.name + ".radiusForRadius",
                                           "Radius used to estimate <radius> (sqrt(a*b))")),
+        _edgeKey(schema.addField<afw::table::Flag>(ctrl.name + ".flags.edge",
+                                                   "Inaccurate measurement due to image edge")),
         _badRadiusKey(schema.addField<afw::table::Flag>(ctrl.name + ".flags.radius",
                                                         "Bad Kron radius")),
         _smallRadiusKey(schema.addField<afw::table::Flag>(ctrl.name + ".flags.smallRadius",
@@ -150,6 +152,7 @@ private:
     algorithms::ScaledFlux::KeyTuple _fluxCorrectionKeys;
     afw::table::Key<float> _radiusKey;
     afw::table::Key<float> _radiusForRadiusKey;
+    afw::table::Key<afw::table::Flag> _edgeKey;
     afw::table::Key<afw::table::Flag> _badRadiusKey;
     afw::table::Key<afw::table::Flag> _smallRadiusKey;
     afw::table::Key<afw::table::Flag> _usedMinimumRadiusKey;
@@ -531,8 +534,16 @@ void KronFlux::_applyAperture(
                           str(boost::format("Kron radius is < epsilon for source %ld") % source.getId()));
     }
 
-    std::pair<double, double> result = aperture.measure(exposure.getMaskedImage(), ctrl.nRadiusForFlux,
-                                                        ctrl.maxSincRadius);
+    std::pair<double, double> result;
+    try {
+        result = aperture.measure(exposure.getMaskedImage(), ctrl.nRadiusForFlux, ctrl.maxSincRadius);
+    } catch (pex::exceptions::LengthError const& e) {
+        // We hit the edge of the image; there's no reasonable fallback or recovery
+        source.set(getKeys().flag, true);
+        source.set(_edgeKey, true);
+        throw;
+    }
+
     source.set(getKeys().meas, result.first);
     source.set(getKeys().err, result.second);
     source.set(_radiusKey, aperture.getAxes().getDeterminantRadius());
@@ -600,6 +611,11 @@ void KronFlux::_apply(
     } else {
         try {
             aperture = KronAperture::determine(mimage, axes, center, ctrl, &radiusForRadius);
+        } catch (pex::exceptions::OutOfRangeError& e) {
+            // We hit the edge of the image: no reasonable fallback or recovery possible
+            source.set(_edgeKey, true);
+            source.set(getKeys().flag, true);
+            throw;
         } catch (BadKronException& e) {
             // Not setting bad=true because we only failed due to low S/N
             aperture = _fallbackRadius(source, R_K_psf, e);
