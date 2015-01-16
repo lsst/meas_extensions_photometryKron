@@ -119,6 +119,9 @@ def measureFree(exposure, center, msConfig):
 
     return source
 
+# this test should be re-enabled after conversion to meas_base framework on DM-982;
+# at present, it uses an old interface that's only on the HSC side
+@unittest.skip("interface unsupported in LSST meas_algorithms")
 def measureForced(exposure, refSource, refWcs, msConfig):
     """Forced measurement"""
     schema = afwTable.SourceTable.makeMinimalSchema()
