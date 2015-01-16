@@ -611,7 +611,7 @@ void KronFlux::_apply(
     } else {
         try {
             aperture = KronAperture::determine(mimage, axes, center, ctrl, &radiusForRadius);
-        } catch (pex::exceptions::OutOfRangeException& e) {
+        } catch (pex::exceptions::OutOfRangeError& e) {
             // We hit the edge of the image: no reasonable fallback or recovery possible
             source.set(_edgeKey, true);
             source.set(getKeys().flag, true);
