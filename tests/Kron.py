@@ -104,6 +104,7 @@ def makeSourceMeasurementConfig(nsigma=6.0, nIterForRadius=1, kfac=2.5):
 def measureFree(exposure, center, msConfig):
     """Unforced measurement"""
     schema = afwTable.SourceTable.makeMinimalSchema()
+    schema.setVersion(0)
     ms = msConfig.makeMeasureSources(schema)
 
     table = afwTable.SourceTable.make(schema)
@@ -121,6 +122,7 @@ def measureFree(exposure, center, msConfig):
 def measureForced(exposure, refSource, refWcs, msConfig):
     """Forced measurement"""
     schema = afwTable.SourceTable.makeMinimalSchema()
+    schema.setVersion(0)
     ms = msConfig.makeMeasureSources(schema, isForced=True)
     forcedTable = afwTable.SourceTable.make(schema)
     forced = forcedTable.makeRecord()
@@ -249,6 +251,7 @@ class KronPhotometryTestCase(tests.TestCase):
             msConfig.slots.centroid = None
 
         schema = afwTable.SourceTable.makeMinimalSchema()
+        schema.setVersion(0)
         ms = msConfig.makeMeasureSources(schema)
         table = afwTable.SourceTable.make(schema)
         msConfig.slots.setupTable(table)
