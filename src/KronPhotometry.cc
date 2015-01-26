@@ -1,4 +1,26 @@
 // -*- LSST-C++ -*-
+/*
+ * LSST Data Management System
+ * Copyright 2008-2015 LSST Corporation.
+ *
+ * This product includes software developed by the
+ * LSST Project (http://www.lsst.org/).
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the LSST License Statement and
+ * the GNU General Public License along with this program.  If not,
+ * see <http://www.lsstcorp.org/LegalNotices/>.
+ */
+
 #include <numeric>
 #include <cmath>
 #include <functional>
@@ -43,7 +65,7 @@ public:
     void reset() {
         _sum = _sumVar = 0.0;
     }
-    void reset(afw::detection::Footprint const&) {}        
+    void reset(afw::detection::Footprint const&) {}
 
     /// @brief method called for each pixel by apply()
     void operator()(typename MaskedImageT::xy_locator loc, ///< locator pointing at the pixel
@@ -85,21 +107,35 @@ public:
         ),
         _fluxCorrectionKeys(ctrl.name, schema),
         _radiusKey(schema.addField<float>(ctrl.name + ".radius", "Kron radius (sqrt(a*b))")),
-        _radiusForRadiusKey(schema.addField<float>(ctrl.name + ".radiusForRadius",
-                                          "Radius used to estimate <radius> (sqrt(a*b))")),
-        _edgeKey(schema.addField<afw::table::Flag>(ctrl.name + ".flags.edge",
-                                                   "Inaccurate measurement due to image edge")),
-        _badRadiusKey(schema.addField<afw::table::Flag>(ctrl.name + ".flags.radius",
-                                                        "Bad Kron radius")),
-        _smallRadiusKey(schema.addField<afw::table::Flag>(ctrl.name + ".flags.smallRadius",
-                                                     "Measured Kron radius was smaller than that of the PSF")),
-        _usedMinimumRadiusKey(schema.addField<afw::table::Flag>(ctrl.name + ".flags.usedMinimumRadius",
-                                                             "Used the minimum radius for the Kron aperture")),
-        _usedPsfRadiusKey(schema.addField<afw::table::Flag>(ctrl.name + ".flags.usedPsfRadius",
-                                                            "Used the PSF Kron radius for the Kron aperture")),
+        _radiusForRadiusKey(schema.addField<float>(
+                                ctrl.name + ".radiusForRadius",
+                                "Radius used to estimate <radius> (sqrt(a*b))"
+                            )),
+        _edgeKey(schema.addField<afw::table::Flag>(
+                     ctrl.name + ".flags.edge",
+                     "Inaccurate measurement due to image edge"
+                 )),
+        _badRadiusKey(schema.addField<afw::table::Flag>(
+                          ctrl.name + ".flags.radius",
+                          "Bad Kron radius"
+                      )),
+        _smallRadiusKey(schema.addField<afw::table::Flag>(
+                            ctrl.name + ".flags.smallRadius",
+                            "Measured Kron radius was smaller than that of the PSF"
+                        )),
+        _usedMinimumRadiusKey(schema.addField<afw::table::Flag>(
+                                  ctrl.name + ".flags.usedMinimumRadius",
+                                  "Used the minimum radius for the Kron aperture"
+                              )),
+        _usedPsfRadiusKey(schema.addField<afw::table::Flag>(
+                              ctrl.name + ".flags.usedPsfRadius",
+                              "Used the PSF Kron radius for the Kron aperture"
+                          )),
         _psfRadiusKey(schema.addField<float>(ctrl.name + ".psfRadius", "Radius of PSF")),
-        _badShapeKey(schema.addField<afw::table::Flag>(ctrl.name + ".flags.badShape",
-                                                    "Shape for measuring Kron radius is bad; used PSF shape"))
+        _badShapeKey(schema.addField<afw::table::Flag>(
+                         ctrl.name + ".flags.badShape",
+                         "Shape for measuring Kron radius is bad; used PSF shape"
+                     ))
     {}
 
 
@@ -184,15 +220,15 @@ public:
                            _ab(ab),
                            _cosTheta(::cos(theta)),
                            _sinTheta(::sin(theta)),
-                           _sum(0.0), _sumR(0.0), 
+                           _sum(0.0), _sumR(0.0),
 #if 0
                            _sumVar(0.0), _sumRVar(0.0),
 #endif
                            _imageX0(mimage.getX0()), _imageY0(mimage.getY0())
         {}
-    
+
     /// @brief Reset everything for a new Footprint
-    void reset() {}        
+    void reset() {}
     void reset(afw::detection::Footprint const& foot) {
         _sum = _sumR = 0.0;
 #if 0
@@ -213,7 +249,7 @@ public:
                               ).str());
         }
     }
-    
+
     /// @brief method called for each pixel by apply()
     void operator()(typename MaskedImageT::xy_locator iloc, ///< locator pointing at the image pixel
                     int x,                                  ///< column-position of pixel
@@ -237,7 +273,7 @@ public:
              * We could avoid all these issues by estimating <r> using the same trick as we use for
              * the sinc fluxes; it's not clear that it's worth it.
              */
-            
+
             double const eR = 0.38259771140356325; // <r> for a single square pixel, about the centre
             r = ::hypot(r, eR*(1 + ::hypot(dx, dy)/afw::geom::ROOT2));
         }
@@ -390,8 +426,8 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
         // Find the desired first moment of the elliptical radius, which corresponds to the major axis.
         //
         FootprintFindMoment<ImageT, afw::detection::Psf::Image> iRFunctor(
-                                                    subImage, center, axes.getA()/axes.getB(), axes.getTheta()
-                                                                 );
+            subImage, center, axes.getA()/axes.getB(), axes.getTheta()
+        );
 
         try {
             iRFunctor.apply(foot);
@@ -401,11 +437,11 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
             }
             break;                      // use the radius we have
         }
-        
+
         if (!iRFunctor.getGood()) {
             throw LSST_EXCEPT(BadKronException, "Bad integral defining Kron radius");
         }
-        
+
         radius = iRFunctor.getIr()*sqrt(axes.getB()/axes.getA());
         if (radius <= radius0) {
             break;
@@ -493,12 +529,12 @@ getPsfFactor(CONST_PTR(afw::detection::Psf) psf,
     int const pad = 5;
     try {
         PTR(PsfImageT) psfImageNoPad = psf->computeImage(center); // Unpadded image of PSF
-        
+
         psfImage = PTR(PsfImageT)(
             new PsfImageT(psfImageNoPad->getDimensions() + afw::geom::Extent2I(2*pad))
             );
         afw::geom::BoxI middleBBox(afw::geom::Point2I(pad, pad), psfImageNoPad->getDimensions());
-        
+
         PTR(PsfImageT) middle(new PsfImageT(*psfImage, middleBBox, afw::image::LOCAL));
         *middle <<= *psfImageNoPad;
     } catch (lsst::pex::exceptions::Exception & e) {
@@ -510,7 +546,9 @@ getPsfFactor(CONST_PTR(afw::detection::Psf) psf,
     int const psfXCen = 0.5*(psfImage->getWidth() - 1); // Center of (21x21) image is (10.0, 10.0)
     int const psfYCen = 0.5*(psfImage->getHeight() - 1);
     // Grrr. calculateSincApertureFlux can't handle an Image
-    PTR(afw::image::MaskedImage<PsfImageT::Pixel>) mi(new afw::image::MaskedImage<PsfImageT::Pixel>(psfImage));
+    PTR(afw::image::MaskedImage<PsfImageT::Pixel>) mi(
+        new afw::image::MaskedImage<PsfImageT::Pixel>(psfImage)
+    );
     afw::geom::ellipses::Ellipse aperture(afw::geom::ellipses::Axes(R_K, R_K),
                                           afw::geom::Point2D(psfXCen, psfYCen));
     return photometer(*mi, aperture, maxSincRadius).first;
@@ -626,7 +664,8 @@ void KronFlux::_apply(
     }
 
     /*
-     * Estimate the minimum acceptable Kron radius as the Kron radius of the PSF or the provided minimum radius
+     * Estimate the minimum acceptable Kron radius as the Kron radius of the PSF or the
+     * provided minimum radius
      */
 
     // Enforce constraints on minimum radius

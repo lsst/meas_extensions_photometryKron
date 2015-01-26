@@ -1,4 +1,25 @@
 #!/usr/bin/env python
+#
+# LSST Data Management System
+# Copyright 2008-2015 LSST Corporation.
+#
+# This product includes software developed by the
+# LSST Project (http://www.lsst.org/).
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the LSST License Statement and
+# the GNU General Public License along with this program.  If not,
+# see <http://www.lsstcorp.org/LegalNotices/>.
+#
 """
 Tests for measuring things
 
@@ -140,7 +161,7 @@ class KronPhotometryTestCase(tests.TestCase):
         self.flux = 1e5
         self.width, self.height = 200, 200
         self.objImg = None
-        
+
     def tearDown(self):
         if self.objImg:
             del self.objImg
@@ -284,11 +305,11 @@ class KronPhotometryTestCase(tests.TestCase):
         ellipse = afwEllipses.Ellipse(afwEllipses.Axes(nsigma*a, nsigma*b, theta),
                                       afwGeom.Point2D(xcen - objImg.getX0(), ycen - objImg.getY0()))
         fpEllipse = afwDetection.Footprint(ellipse)
-        
+
         sumI = 0.0
         sumR = 0.38259771140356325/ab*(1 + math.sqrt(2)*math.hypot(math.fmod(xcen, 1), math.fmod(ycen, 1)))*\
                objImg.getMaskedImage().getImage().get(int(xcen), int(ycen))
-               
+
         gal = objImg.getMaskedImage().getImage()
 
         c, s = math.cos(theta), math.sin(theta)
@@ -325,7 +346,7 @@ class KronPhotometryTestCase(tests.TestCase):
     def testEllipticalGaussian(self):
         """Test measuring the Kron quantities of an elliptical Gaussian"""
 
-        ignoreTestFailures = False      # if True, keep going after test failures but always generate a failure
+        ignoreTestFailures = False  # if True, keep going after test failures but always generate a failure
         #
         # Choose function that does the measuring
         #
@@ -396,10 +417,11 @@ class KronPhotometryTestCase(tests.TestCase):
                                                              (ID, R_K, R_truth, (R_K - R_truth),
                                                               1e-2*self.getTolRad(a, b))))
 
-                                self.assertFalse(failFlux, (("%s  flux_Kron: %g v. exact value %g " +
-                                                             "(error %.2f%% limit %.2f%%)") %
-                                                            (ID, flux_K, flux_truth, 100*(flux_K/flux_truth-1),
-                                                             self.getTolFlux(a, b, kfac))))
+                                self.assertFalse(failFlux,
+                                                 (("%s  flux_Kron: %g v. exact value %g " +
+                                                   "(error %.2f%% limit %.2f%%)") %
+                                                  (ID, flux_K, flux_truth, 100*(flux_K/flux_truth-1),
+                                                   self.getTolFlux(a, b, kfac))))
 
         self.assertFalse(ignoreTestFailures, "You are ignoring possible test failures")
 
