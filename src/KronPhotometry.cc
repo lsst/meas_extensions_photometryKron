@@ -1,4 +1,26 @@
 // -*- LSST-C++ -*-
+/*
+ * LSST Data Management System
+ * Copyright 2008-2015 LSST Corporation.
+ *
+ * This product includes software developed by the
+ * LSST Project (http://www.lsst.org/).
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the LSST License Statement and
+ * the GNU General Public License along with this program.  If not,
+ * see <http://www.lsstcorp.org/LegalNotices/>.
+ */
+
 #include <numeric>
 #include <cmath>
 #include <functional>
@@ -26,6 +48,10 @@ namespace lsst {
 namespace meas {
 namespace extensions {
 namespace photometryKron {
+
+LSST_EXCEPTION_TYPE(BadKronException, pex::exceptions::RuntimeError,
+                    lsst::meas::extensions::photometryKron::BadKronException);
+
 namespace {
 
 template <typename MaskedImageT>
@@ -39,7 +65,7 @@ public:
     void reset() {
         _sum = _sumVar = 0.0;
     }
-    void reset(afw::detection::Footprint const&) {}        
+    void reset(afw::detection::Footprint const&) {}
 
     /// @brief method called for each pixel by apply()
     void operator()(typename MaskedImageT::xy_locator loc, ///< locator pointing at the pixel
@@ -81,11 +107,35 @@ public:
         ),
         _fluxCorrectionKeys(ctrl.name, schema),
         _radiusKey(schema.addField<float>(ctrl.name + ".radius", "Kron radius (sqrt(a*b))")),
-        _radiusForRadiusKey(schema.addField<float>(ctrl.name + ".radiusForRadius",
-                                          "Radius used to estimate <radius> (sqrt(a*b))")),
-        _badRadiusKey(schema.addField<afw::table::Flag>(ctrl.name + ".flags.radius", "Bad Kron radius")),
-        _smallRadiusKey(schema.addField<afw::table::Flag>(ctrl.name + ".flags.smallRadius",
-                                                     "Measured Kron radius was smaller than that of the PSF"))
+        _radiusForRadiusKey(schema.addField<float>(
+                                ctrl.name + ".radiusForRadius",
+                                "Radius used to estimate <radius> (sqrt(a*b))"
+                            )),
+        _edgeKey(schema.addField<afw::table::Flag>(
+                     ctrl.name + ".flags.edge",
+                     "Inaccurate measurement due to image edge"
+                 )),
+        _badRadiusKey(schema.addField<afw::table::Flag>(
+                          ctrl.name + ".flags.radius",
+                          "Bad Kron radius"
+                      )),
+        _smallRadiusKey(schema.addField<afw::table::Flag>(
+                            ctrl.name + ".flags.smallRadius",
+                            "Measured Kron radius was smaller than that of the PSF"
+                        )),
+        _usedMinimumRadiusKey(schema.addField<afw::table::Flag>(
+                                  ctrl.name + ".flags.usedMinimumRadius",
+                                  "Used the minimum radius for the Kron aperture"
+                              )),
+        _usedPsfRadiusKey(schema.addField<afw::table::Flag>(
+                              ctrl.name + ".flags.usedPsfRadius",
+                              "Used the PSF Kron radius for the Kron aperture"
+                          )),
+        _psfRadiusKey(schema.addField<float>(ctrl.name + ".psfRadius", "Radius of PSF")),
+        _badShapeKey(schema.addField<afw::table::Flag>(
+                         ctrl.name + ".flags.badShape",
+                         "Shape for measuring Kron radius is bad; used PSF shape"
+                     ))
     {}
 
 
@@ -122,17 +172,42 @@ private:
         afw::geom::AffineTransform const & refToMeas
     ) const;
 
+    // Provide a KronAperture for when the regular aperture fails
+    //
+    // Essentially this is an error handler that provides a fallback if possible,
+    // or re-throws the exception.
+    //
+    // The fallback aperture uses the minimumRadius if defined; otherwise uses the PSF Kron radius.
+    PTR(KronAperture) _fallbackRadius(afw::table::SourceRecord& source, // Source, to set flags
+                                      double const R_K_psf,             // Kron radius of PSF
+                                      pex::exceptions::Exception& exc   // Exception to re-throw, if required
+        ) const;
+
     LSST_MEAS_ALGORITHM_PRIVATE_INTERFACE(KronFlux);
 
     algorithms::ScaledFlux::KeyTuple _fluxCorrectionKeys;
     afw::table::Key<float> _radiusKey;
     afw::table::Key<float> _radiusForRadiusKey;
+    afw::table::Key<afw::table::Flag> _edgeKey;
     afw::table::Key<afw::table::Flag> _badRadiusKey;
     afw::table::Key<afw::table::Flag> _smallRadiusKey;
+    afw::table::Key<afw::table::Flag> _usedMinimumRadiusKey;
+    afw::table::Key<afw::table::Flag> _usedPsfRadiusKey;
+    afw::table::Key<float> _psfRadiusKey;
+    afw::table::Key<afw::table::Flag> _badShapeKey;
 };
 
 /************************************************************************************************************/
-
+///
+/// Find the first elliptical moment of an object
+///
+/// We know the shape and orientation of the ellipse to use, specified by ab and theta
+/// If we take theta to be 0 the major axis is aligned along the x axis.  In this case
+/// we may define the elliptical radius as sqrt(x^2 + (y*a/b)^2) of a point (x, y).
+///
+/// In other words, it's the length of the major axis of the ellipse of specified shape that passes through
+/// the point
+///
 template <typename MaskedImageT, typename WeightImageT>
 class FootprintFindMoment : public afw::detection::FootprintFunctor<MaskedImageT> {
 public:
@@ -145,15 +220,15 @@ public:
                            _ab(ab),
                            _cosTheta(::cos(theta)),
                            _sinTheta(::sin(theta)),
-                           _sum(0.0), _sumR(0.0), 
+                           _sum(0.0), _sumR(0.0),
 #if 0
                            _sumVar(0.0), _sumRVar(0.0),
 #endif
                            _imageX0(mimage.getX0()), _imageY0(mimage.getY0())
         {}
-    
+
     /// @brief Reset everything for a new Footprint
-    void reset() {}        
+    void reset() {}
     void reset(afw::detection::Footprint const& foot) {
         _sum = _sumR = 0.0;
 #if 0
@@ -174,7 +249,7 @@ public:
                               ).str());
         }
     }
-    
+
     /// @brief method called for each pixel by apply()
     void operator()(typename MaskedImageT::xy_locator iloc, ///< locator pointing at the image pixel
                     int x,                                  ///< column-position of pixel
@@ -198,7 +273,7 @@ public:
              * We could avoid all these issues by estimating <r> using the same trick as we use for
              * the sinc fluxes; it's not clear that it's worth it.
              */
-            
+
             double const eR = 0.38259771140356325; // <r> for a single square pixel, about the centre
             r = ::hypot(r, eR*(1 + ::hypot(dx, dy)/afw::geom::ROOT2));
         }
@@ -214,7 +289,7 @@ public:
 #endif
     }
 
-    /// Return the Footprint's <r>
+    /// Return the Footprint's <r_elliptical>
     double getIr() const { return _sumR/_sum; }
 
 #if 0
@@ -258,11 +333,12 @@ struct KronAperture {
     double getX() const { return _center.getX(); }
     double getY() const { return _center.getY(); }
     afw::geom::Point2D const& getCenter() const { return _center; }
-    afw::geom::ellipses::Axes getAxes() const { return _axes; }
+    afw::geom::ellipses::Axes & getAxes() { return _axes; }
+    afw::geom::ellipses::Axes const& getAxes() const { return _axes; }
 
     /// Determine the Kron Aperture from an image
     template<typename ImageT>
-    static PTR(KronAperture) determine(ImageT const& image, afw::table::SourceRecord const& source,
+    static PTR(KronAperture) determine(ImageT const& image, afw::geom::ellipses::Axes axes,
                                        afw::geom::Point2D const& center,
                                        KronFluxControl const& ctrl, float *radiusForRadius
                                       );
@@ -277,7 +353,7 @@ struct KronAperture {
     /// Transform a Kron Aperture to a different frame
     PTR(KronAperture) transform(afw::geom::AffineTransform const& trans) const {
         afw::geom::Point2D const center = trans(getCenter());
-        afw::geom::ellipses::Axes const axes(getAxes().transform(trans.getLinear()));
+        afw::geom::ellipses::Axes const axes(*getAxes().transform(trans.getLinear()).copy());
         return boost::make_shared<KronAperture>(center, axes);
     }
 
@@ -291,7 +367,7 @@ private:
         );
 
     afw::geom::Point2D const _center;     // Center of aperture
-    afw::geom::ellipses::Axes const _axes;       // Ellipse defining aperture shape
+    afw::geom::ellipses::Axes _axes;      // Ellipse defining aperture shape
 };
 
 
@@ -301,9 +377,9 @@ afw::geom::ellipses::Axes KronAperture::_getKronAxes(
     double const radius
     )
 {
-    afw::geom::ellipses::Axes axes(shape.transform(transformation));
+    afw::geom::ellipses::Axes axes(shape);
     axes.scale(radius/axes.getDeterminantRadius());
-    return axes;
+    return axes.transform(transformation);
 }
 
 
@@ -312,7 +388,7 @@ afw::geom::ellipses::Axes KronAperture::_getKronAxes(
  */
 template<typename ImageT>
 PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measure
-                                          afw::table::SourceRecord const& source, // Source with measurements
+                                          afw::geom::ellipses::Axes axes,   // Shape of aperture
                                           afw::geom::Point2D const& center, // Centre of source
                                           KronFluxControl const& ctrl,      // control the algorithm
                                           float *radiusForRadius            // radius used to estimate radius
@@ -328,19 +404,8 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
     afw::math::SeparableKernel kernel(kSize, kSize, gaussFunc, gaussFunc);
     bool const doNormalize = true, doCopyEdge = false;
     afw::math::ConvolutionControl convCtrl(doNormalize, doCopyEdge);
-    //
-    // Get the shape of the desired aperture
-    //
-    afw::geom::ellipses::Axes axes(source.getShape());
-    afw::geom::ellipses::Axes footprintAxes(source.getFootprint()->getShape());
-    footprintAxes.scale(2);             // <r^2> = 1/2 for a disk
 
     double radius0 = axes.getDeterminantRadius();
-    double const footRadius = footprintAxes.getDeterminantRadius();
-    if (ctrl.useFootprintRadius && footRadius > radius0*ctrl.nSigmaForRadius) {
-        radius0 = footRadius/ctrl.nSigmaForRadius; // we'll scale it up by nSigmaForRadius
-        axes.scale(radius0/axes.getDeterminantRadius());
-    }
     double radius = std::numeric_limits<double>::quiet_NaN();
     for (int i = 0; i < ctrl.nIterForRadius; ++i) {
         axes.scale(ctrl.nSigmaForRadius);
@@ -358,11 +423,11 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
             afw::math::convolve(subImage, ImageT(image, bbox, afw::image::PARENT, false), kernel, convCtrl);
         }
         //
-        // Find the desired first moment
+        // Find the desired first moment of the elliptical radius, which corresponds to the major axis.
         //
         FootprintFindMoment<ImageT, afw::detection::Psf::Image> iRFunctor(
-                                                    subImage, center, axes.getA()/axes.getB(), axes.getTheta()
-                                                                 );
+            subImage, center, axes.getA()/axes.getB(), axes.getTheta()
+        );
 
         try {
             iRFunctor.apply(foot);
@@ -372,13 +437,12 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
             }
             break;                      // use the radius we have
         }
-        
+
         if (!iRFunctor.getGood()) {
-            throw LSST_EXCEPT(lsst::pex::exceptions::RuntimeError,
-                              "Bad footprint when determining Kron aperture");
+            throw LSST_EXCEPT(BadKronException, "Bad integral defining Kron radius");
         }
-        
-        radius = iRFunctor.getIr();
+
+        radius = iRFunctor.getIr()*sqrt(axes.getB()/axes.getA());
         if (radius <= radius0) {
             break;
         }
@@ -387,9 +451,7 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
         axes.scale(radius/axes.getDeterminantRadius()); // set axes to our current estimate of R_K
     }
 
-    return boost::make_shared<KronAperture>(center,
-                                            afw::geom::ellipses::Axes(radius, radius*axes.getB()/axes.getA(),
-                                                                      axes.getTheta()));
+    return boost::make_shared<KronAperture>(center, axes);
 }
 
 // Photometer an image with a particular aperture
@@ -417,6 +479,19 @@ std::pair<double, double> photometer(
                             % axes.getA() % axes.getB() % afw::geom::radToDeg(axes.getTheta())).str());
         throw e;
     }
+}
+
+
+double calculatePsfKronRadius(
+    CONST_PTR(afw::detection::Psf) const& psf, // PSF to measure
+    afw::geom::Point2D const& center, // Centroid of source on parent image
+    double smoothingSigma=0.0         // Gaussian sigma of smoothing applied
+    )
+{
+    assert(psf);
+    double const radius = psf->computeShape(center).getDeterminantRadius();
+    // For a Gaussian N(0, sigma^2), the Kron radius is sqrt(pi/2)*sigma
+    return ::sqrt(afw::geom::PI/2)*::hypot(radius, std::max(0.0, smoothingSigma));
 }
 
 template<typename ImageT>
@@ -454,12 +529,12 @@ getPsfFactor(CONST_PTR(afw::detection::Psf) psf,
     int const pad = 5;
     try {
         PTR(PsfImageT) psfImageNoPad = psf->computeImage(center); // Unpadded image of PSF
-        
+
         psfImage = PTR(PsfImageT)(
             new PsfImageT(psfImageNoPad->getDimensions() + afw::geom::Extent2I(2*pad))
             );
         afw::geom::BoxI middleBBox(afw::geom::Point2I(pad, pad), psfImageNoPad->getDimensions());
-        
+
         PTR(PsfImageT) middle(new PsfImageT(*psfImage, middleBBox, afw::image::LOCAL));
         *middle <<= *psfImageNoPad;
     } catch (lsst::pex::exceptions::Exception & e) {
@@ -471,7 +546,9 @@ getPsfFactor(CONST_PTR(afw::detection::Psf) psf,
     int const psfXCen = 0.5*(psfImage->getWidth() - 1); // Center of (21x21) image is (10.0, 10.0)
     int const psfYCen = 0.5*(psfImage->getHeight() - 1);
     // Grrr. calculateSincApertureFlux can't handle an Image
-    PTR(afw::image::MaskedImage<PsfImageT::Pixel>) mi(new afw::image::MaskedImage<PsfImageT::Pixel>(psfImage));
+    PTR(afw::image::MaskedImage<PsfImageT::Pixel>) mi(
+        new afw::image::MaskedImage<PsfImageT::Pixel>(psfImage)
+    );
     afw::geom::ellipses::Ellipse aperture(afw::geom::ellipses::Axes(R_K, R_K),
                                           afw::geom::Point2D(psfXCen, psfYCen));
     return photometer(*mi, aperture, maxSincRadius).first;
@@ -488,66 +565,27 @@ void KronFlux::_applyAperture(
 {
     KronFluxControl const& ctrl = static_cast<KronFluxControl const&>(this->getControl());
 
-    source.set(_badRadiusKey, false);
-
     double const rad = aperture.getAxes().getDeterminantRadius();
-    if (ctrl.enforceMinimumRadius && rad < std::numeric_limits<double>::epsilon()) {
-        if (!exposure.getPsf()) {       // no minimum radius is available
-            throw LSST_EXCEPT(lsst::pex::exceptions::UnderflowError,
-                              str(boost::format("Kron radius is < epsilon for source %ld")
-                                  % source.getId()));
-        }
-    }
-    source.set(_smallRadiusKey, false); // innocent until proven guilty
-    /*
-     * Estimate the minimum acceptable Kron radius as the Kron radius of the PSF
-     *
-     * N.b. we'd really like to specify an aperture based on the Psf's shape (#2563)
-     * N.b. computeGaussianWidth is not declared const (#2570)
-     */
-    double R_K_psf = -1;
-    if (exposure.getPsf()) {
-        double irSum = 0, iSum = 0;
-        typedef afw::detection::Psf::Image Image;
-        CONST_PTR(Image) image = exposure.getPsf()->computeImage(aperture.getCenter());
-        double const xCen = aperture.getX(), yCen = aperture.getY();
-        int const x0 = image->getX0(), y0 = image->getY0();
-        for (int y = 0; y != image->getHeight(); ++y) {
-            double const dy = y + y0 - yCen;
-            double const dy2 = dy*dy;
-            Image::x_iterator iter = image->row_begin(y), end = image->row_end(y);
-            for (int x = 0; iter != end; ++iter, ++x) {
-                double const dx = x + x0 - xCen;
-                double const r = std::sqrt(dx*dx + dy2);
-                double const f = *iter;
-                irSum += f*r;
-                iSum += f;
-            }
-        }
-        double const moment = irSum/iSum;
-        R_K_psf = ::sqrt(afw::geom::PI/2)*::hypot(moment, std::max(0.0, ctrl.smoothingSigma));
-        if (ctrl.enforceMinimumRadius && rad < R_K_psf) {
-            aperture.getAxes().scale(R_K_psf/rad);
-            source.set(_smallRadiusKey, true); // guilty after all
-        }
+    if (rad < std::numeric_limits<double>::epsilon()) {
+        source.set(_badRadiusKey, true);
+        throw LSST_EXCEPT(lsst::pex::exceptions::UnderflowError,
+                          str(boost::format("Kron radius is < epsilon for source %ld") % source.getId()));
     }
 
-    std::pair<double, double> result = aperture.measure(exposure.getMaskedImage(), ctrl.nRadiusForFlux,
-                                                        ctrl.maxSincRadius);
+    std::pair<double, double> result;
+    try {
+        result = aperture.measure(exposure.getMaskedImage(), ctrl.nRadiusForFlux, ctrl.maxSincRadius);
+    } catch (pex::exceptions::LengthError const& e) {
+        // We hit the edge of the image; there's no reasonable fallback or recovery
+        source.set(getKeys().flag, true);
+        source.set(_edgeKey, true);
+        throw;
+    }
+
     source.set(getKeys().meas, result.first);
     source.set(getKeys().err, result.second);
     source.set(_radiusKey, aperture.getAxes().getDeterminantRadius());
-    //
-    // Now aperture corrections. Calculate the PSF models' Kron flux, and allow
-    // the aperture correction code to force Kron fluxes to agree with the PSF flux for point sources
-    //
-    double const psfFactor = getPsfFactor(exposure.getPsf(), aperture.getCenter(),
-                                          R_K_psf*ctrl.nRadiusForFlux, ctrl.maxSincRadius);
-    source.set(_fluxCorrectionKeys.psfFactor, psfFactor);
-    source.set(_fluxCorrectionKeys.psfFactorFlag, false); // i.e. good
 }
-
-
 
 template <typename PixelT>
 void KronFlux::_apply(
@@ -556,12 +594,52 @@ void KronFlux::_apply(
                       afw::geom::Point2D const & center
                      ) const {
     source.set(getKeys().flag, true); // bad unless we get all the way to success at the end
+    source.set(_badRadiusKey, false);  // innocent until proven guilty
+    source.set(_smallRadiusKey, false); // innocent until proven guilty
+    source.set(_badShapeKey, false); // innocent until proven guilty
+    source.set(_usedMinimumRadiusKey, false);
+    source.set(_usedPsfRadiusKey, false);
+
+    // Did we hit a condition that fundamentally prevented measuring the Kron flux?
+    // Such conditions include hitting the edge of the image and bad input shape, but not low signal-to-noise.
+    bool bad = false;
+
     afw::image::MaskedImage<PixelT> const& mimage = exposure.getMaskedImage();
 
     KronFluxControl const & ctrl = static_cast<KronFluxControl const &>(this->getControl());
 
-    if (source.getShapeFlag()) {        // the shape's bad; give up now
-        return;
+    double R_K_psf = -1;
+    if (exposure.getPsf()) {
+        R_K_psf = calculatePsfKronRadius(exposure.getPsf(), center, ctrl.smoothingSigma);
+    }
+
+    //
+    // Get the shape of the desired aperture
+    //
+    afw::geom::ellipses::Axes axes;
+    if (!source.getShapeFlag()) {
+        axes = source.getShape();
+    } else {
+        bad = true;
+        if (!exposure.getPsf()) {
+            throw LSST_EXCEPT(pex::exceptions::RuntimeError, "Bad shape and no PSF");
+        }
+        axes = exposure.getPsf()->computeShape();
+        source.set(_badShapeKey, true);
+    }
+    if (ctrl.useFootprintRadius) {
+        afw::geom::ellipses::Axes footprintAxes(source.getFootprint()->getShape());
+        // if the Footprint's a disk of radius R we want footRadius == R.
+        // As <r^2> = R^2/2 for a disk, we need to scale up by sqrt(2)
+        footprintAxes.scale(::sqrt(2));
+
+        double radius0 = axes.getDeterminantRadius();
+        double const footRadius = footprintAxes.getDeterminantRadius();
+
+        if (footRadius > radius0*ctrl.nSigmaForRadius) {
+            radius0 = footRadius/ctrl.nSigmaForRadius; // we'll scale it up by nSigmaForRadius
+            axes.scale(radius0/axes.getDeterminantRadius());
+        }
     }
 
     PTR(KronAperture) aperture;
@@ -570,15 +648,52 @@ void KronFlux::_apply(
         aperture.reset(new KronAperture(source));
     } else {
         try {
-            aperture = KronAperture::determine(mimage, source, center, ctrl, &radiusForRadius);
+            aperture = KronAperture::determine(mimage, axes, center, ctrl, &radiusForRadius);
+        } catch (pex::exceptions::OutOfRangeError& e) {
+            // We hit the edge of the image: no reasonable fallback or recovery possible
+            source.set(_edgeKey, true);
+            source.set(getKeys().flag, true);
+            throw;
+        } catch (BadKronException& e) {
+            // Not setting bad=true because we only failed due to low S/N
+            aperture = _fallbackRadius(source, R_K_psf, e);
         } catch(pex::exceptions::Exception& e) {
-            return;
+            bad = true; // There's something fundamental keeping us from measuring the Kron aperture
+            aperture = _fallbackRadius(source, R_K_psf, e);
+        }
+    }
+
+    /*
+     * Estimate the minimum acceptable Kron radius as the Kron radius of the PSF or the
+     * provided minimum radius
+     */
+
+    // Enforce constraints on minimum radius
+    double rad = aperture->getAxes().getDeterminantRadius();
+    if (ctrl.enforceMinimumRadius) {
+        double newRadius = rad;
+        if (ctrl.minimumRadius > 0.0) {
+            if (rad < ctrl.minimumRadius) {
+                newRadius = ctrl.minimumRadius;
+                source.set(_usedMinimumRadiusKey, true);
+            }
+        } else if (!exposure.getPsf()) {
+            throw LSST_EXCEPT(lsst::pex::exceptions::RuntimeError,
+                              "No minimum radius and no PSF provided");
+        } else if (rad < R_K_psf) {
+            newRadius = R_K_psf;
+            source.set(_usedPsfRadiusKey, true);
+        }
+        if (newRadius != rad) {
+            aperture->getAxes().scale(newRadius/rad);
+            source.set(_smallRadiusKey, true); // guilty after all
         }
     }
 
     _applyAperture(source, exposure, *aperture);
     source.set(_radiusForRadiusKey, radiusForRadius);
-    source.set(getKeys().flag, false);
+    source.set(_psfRadiusKey, R_K_psf);
+    source.set(getKeys().flag, bad);
 }
 
 template <typename PixelT>
@@ -595,8 +710,34 @@ void KronFlux::_applyForced(
     float const radius = reference.get(reference.getSchema().find<float>(ctrl.name + ".radius").key);
     KronAperture const aperture(reference, refToMeas, radius);
     _applyAperture(source, exposure, aperture);
+    if (exposure.getPsf()) {
+        source.set(_psfRadiusKey, calculatePsfKronRadius(exposure.getPsf(), center, ctrl.smoothingSigma));
+    }
     source.set(getKeys().flag, false);
 }
+
+
+PTR(KronAperture) KronFlux::_fallbackRadius(afw::table::SourceRecord& source, double const R_K_psf,
+                                            pex::exceptions::Exception& exc) const
+{
+    KronFluxControl const & ctrl = static_cast<KronFluxControl const &>(this->getControl());
+    source.set(_badRadiusKey, true);
+    double newRadius;
+    if (ctrl.minimumRadius > 0) {
+        newRadius = ctrl.minimumRadius;
+        source.set(_usedMinimumRadiusKey, true);
+    } else if (R_K_psf > 0) {
+        newRadius = R_K_psf;
+        source.set(_usedPsfRadiusKey, true);
+    } else {
+        LSST_EXCEPT_ADD(exc, "Bad Kron aperture, no minimum radius specified, and no PSF");
+        throw exc;
+    }
+    PTR(KronAperture) aperture(new KronAperture(source));
+    aperture->getAxes().scale(newRadius/aperture->getAxes().getDeterminantRadius());
+    return aperture;
+}
+
 
 
 LSST_MEAS_ALGORITHM_PRIVATE_IMPLEMENTATION(KronFlux);
