@@ -22,6 +22,7 @@ import lsst.afw.math as afwMath
 import lsst.afw.table as afwTable
 import lsst.afw.image as afwImage
 import lsst.meas.algorithms as measAlg
+import lsst.meas.base as measBase
 import lsst.meas.extensions.photometryKron as Kron
 
 try:
@@ -34,6 +35,24 @@ pexLogging.Trace_setVerbosity("meas.photometry.kron", verbose)
 
 import lsst.afw.display.ds9 as ds9
 import lsst.afw.display.utils as displayUtils
+
+def makePluginAndCat(alg, name, control=None, metadata=False, centroid=None):
+    if control == None:
+        control=alg.ConfigClass()
+    schema = afwTable.SourceTable.makeMinimalSchema()
+    if centroid:
+        schema.addField(centroid + "_x", type=float)
+        schema.addField(centroid + "_y", type=float)
+        schema.addField(centroid + "_flag", type='Flag')
+    if metadata:
+        plugin = alg(control, name, schema, dafBase.PropertySet())
+    else:
+        plugin = alg(control, name, schema)
+    cat = afwTable.SourceCatalog(schema)
+    if centroid:
+        cat.defineCentroid(centroid)
+    return plugin, cat
+
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
@@ -122,7 +141,6 @@ class KronPhotometryTestCase(unittest.TestCase):
         ksize = 25                      # size of desired kernel
         self.objImg.setPsf(measAlg.DoubleGaussianPsf(ksize, ksize,
                                                      FWHM/(2*math.sqrt(2*math.log(2))), 1, 0.1))
-
         return measureKron(self.objImg, xcen, ycen, nsigma, kfac, nIterForRadius)
 
     def measureKron(self, objImg, xcen, ycen, nsigma, kfac, nIterForRadius):
@@ -130,35 +148,34 @@ class KronPhotometryTestCase(unittest.TestCase):
         #
         # Now measure things
         #
-        msConfig = measAlg.SourceMeasurementConfig()
-        if False:                       # requires #2546
-            msConfig.centroider = None
-            msConfig.slots.centroid = None
-
-        msConfig.algorithms.names.add("flux.kron")
-        msConfig.algorithms.names.remove("correctfluxes")
-        msConfig.algorithms["flux.kron"].nSigmaForRadius = nsigma
-        msConfig.algorithms["flux.kron"].nIterForRadius = nIterForRadius
-        msConfig.algorithms["flux.kron"].nRadiusForFlux = kfac
-        msConfig.algorithms["flux.kron"].enforceMinimumRadius = False
+        msConfig = measBase.SingleFrameMeasurementConfig()
+        msConfig.algorithms.names = ["base_SdssCentroid", "base_SdssShape", "extensions_photometryKron_KronFlux"]
+        msConfig.slots.centroid = "base_SdssCentroid"
+        msConfig.slots.shape = "base_SdssShape"
+        msConfig.slots.apFlux = "extensions_photometryKron_KronFlux"
+        msConfig.slots.modelFlux = None
+        msConfig.slots.psfFlux = None
+        msConfig.slots.instFlux = None
+        #msConfig.algorithms.names.remove("correctfluxes")
+        msConfig.plugins["extensions_photometryKron_KronFlux"].nSigmaForRadius = nsigma
+        msConfig.plugins["extensions_photometryKron_KronFlux"].nIterForRadius = nIterForRadius
+        msConfig.plugins["extensions_photometryKron_KronFlux"].nRadiusForFlux = kfac
+        msConfig.plugins["extensions_photometryKron_KronFlux"].enforceMinimumRadius = False
         schema = afwTable.SourceTable.makeMinimalSchema()
-        ms = msConfig.makeMeasureSources(schema)
-        
-        table = afwTable.SourceTable.make(schema)
-        msConfig.slots.setupTable(table)
-        source = table.makeRecord()
+        task = measBase.SingleFrameMeasurementTask(schema, config=msConfig)
+        measCat = afwTable.SourceCatalog(schema)
 
+        source = measCat.addNew()
         ss = afwDetection.FootprintSet(objImg.getMaskedImage(), afwDetection.Threshold(0.1))
         fp = ss.getFootprints()[0]
         source.setFootprint(fp)
-
-        center = afwGeom.Point2D(xcen, ycen)
-        ms.apply(source, objImg, center)
-
-        R_K = source.get("flux.kron.radius")
-        flux_K = source.get("flux.kron")
-        fluxErr_K = source.get("flux.kron.err")
-        flags_K = source.get("flux.kron.flags")
+        # Then run the default SFM task.  Results not checked
+        task.run(measCat, objImg)
+        alg = Kron.KronFluxAlgorithm
+        R_K = source.get("extensions_photometryKron_KronFlux_radius")
+        flux_K = source.get("extensions_photometryKron_KronFlux_flux")
+        fluxErr_K = source.get("extensions_photometryKron_KronFlux_fluxSigma")
+        flags_K = source.get("extensions_photometryKron_KronFlux_flag_radius")
         
         if display:
             xc, yc = xcen - objImg.getX0(), ycen - objImg.getY0()
@@ -168,7 +185,7 @@ class KronPhotometryTestCase(unittest.TestCase):
             shape = source.getShape()
             if True:                    # nsigma*shape, the radius used to estimate R_K
                 shape = shape.clone()
-                shape.scale(source.get("flux.kron.radiusForRadius")/shape.getDeterminantRadius())
+                shape.scale(source.get("extensions_photometryKron_KronFlux_radiusForRadius")/shape.getDeterminantRadius())
                 ds9.dot(shape, xc, yc, ctype=ds9.MAGENTA, frame=ds9Frame)
             # Show R_K
             shape = shape.clone()

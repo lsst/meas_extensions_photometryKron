@@ -19,10 +19,8 @@
 # the GNU General Public License along with this program.  If not, 
 # see <http://www.lsstcorp.org/LegalNotices/>.
 #
-
 from .kronLib import *
 from .version import *
-
-import lsst.meas.algorithms
-lsst.meas.algorithms.AlgorithmRegistry.register("flux.kron", KronFluxControl)
+import lsst.meas.base
+lsst.meas.base.wrapSimpleAlgorithm(KronFluxAlgorithm, Control=KronFluxControl, executionOrder=2.0)
 del lsst # cleanup namespace
