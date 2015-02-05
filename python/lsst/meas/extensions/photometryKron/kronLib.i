@@ -68,8 +68,8 @@ Interface to Kron magnitudes
 %import "lsst/pex/config.h"
 
 %{
-#include "lsst/meas/extensions/photometryKron.h"
+#include "lsst/meas/extensions/photometryKron/KronFluxAlgorithm.h"
 %}
 
 %feature("notabstract") lsst::meas::extensions::photometryKron::KronFluxAlgorithm;
-%include "lsst/meas/extensions/photometryKron.h"
+%include "lsst/meas/extensions/photometryKron/KronFluxAlgorithm.h"

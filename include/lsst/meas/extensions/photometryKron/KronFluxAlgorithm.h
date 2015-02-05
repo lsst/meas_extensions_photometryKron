@@ -71,7 +71,7 @@ public:
     {}
 };
 /**
- *  @brief A measurement algorithm that estimates flux using Kron photometry 
+ *  @brief A measurement algorithm that estimates flux using Kron photometry
  */
 class KronFluxAlgorithm : public base::SimpleAlgorithm {
 public:
@@ -79,7 +79,7 @@ public:
     enum {
         FAILURE=base::FlagHandler::FAILURE,
         RADIUS,
-        SMALL_RADIUS, 
+        SMALL_RADIUS,
         N_FLAGS
     };
 
@@ -88,6 +88,8 @@ public:
     typedef KronFluxControl Control;
 
     KronFluxAlgorithm(Control const & ctrl, std::string const & name, afw::table::Schema & schema);
+
+private:
 
     virtual void measure(
         afw::table::SourceRecord & measRecord,
@@ -99,7 +101,6 @@ public:
         meas::base::MeasurementError * error=NULL
     ) const;
 
-private:
 
     void _applyAperture(
         afw::table::SourceRecord & source,
