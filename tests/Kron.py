@@ -40,11 +40,12 @@ import lsst.pex.policy as pexPolicy
 import lsst.afw.detection as afwDetection
 import lsst.afw.geom as afwGeom
 import lsst.afw.geom.ellipses as afwEllipses
-import lsst.afw.math as afwMath
-import lsst.afw.table as afwTable
 import lsst.afw.coord as afwCoord
 import lsst.afw.image as afwImage
+import lsst.afw.math as afwMath
+import lsst.afw.table as afwTable
 import lsst.meas.algorithms as measAlg
+import lsst.meas.base as measBase
 import lsst.meas.extensions.photometryKron as Kron
 
 try:
@@ -106,53 +107,54 @@ def makeGalaxy(width, height, flux, a, b, theta, dx=0.0, dy=0.0, xy0=None, xcen=
     exp.getMaskedImage().getVariance().set(1.0)
     exp.setWcs(afwImage.makeWcs(afwCoord.Coord(0.0*afwGeom.degrees, 0.0*afwGeom.degrees),
                                 afwGeom.Point2D(0.0, 0.0), 1.0e-4, 0.0, 0.0, 1.0e-4))
+    # add a dummy Psf.  The new SdssCentroid needs one
+    exp.setPsf(afwDetection.GaussianPsf(11, 11, 0.01))
     return exp
 
-def makeSourceMeasurementConfig(nsigma=6.0, nIterForRadius=1, kfac=2.5):
+def makeSourceMeasurementConfig(forced=False, nsigma=6.0, nIterForRadius=1, kfac=2.5):
     """Construct a SourceMeasurementConfig with the requested parameters"""
-    msConfig = measAlg.SourceMeasurementConfig()
-    if False:                       # requires #2546
-        msConfig.centroider = None
-        msConfig.slots.centroid = None
-    msConfig.algorithms.names.add("flux.kron")
-    msConfig.algorithms.names.remove("correctfluxes")
-    msConfig.algorithms["flux.kron"].nSigmaForRadius = nsigma
-    msConfig.algorithms["flux.kron"].nIterForRadius = nIterForRadius
-    msConfig.algorithms["flux.kron"].nRadiusForFlux = kfac
-    msConfig.algorithms["flux.kron"].enforceMinimumRadius = False
+    if forced:
+        msConfig = measBase.ForcedMeasurementConfig()
+        msConfig.algorithms.names = ["base_TransformedCentroid", "base_TransformedShape",
+                                     "extensions_photometryKron_KronFlux"]
+        msConfig.slots.centroid = "base_TransformedCentroid"
+        msConfig.slots.shape = "base_TransformedShape"
+    else:
+        msConfig = measBase.SingleFrameMeasurementConfig()
+        msConfig.algorithms.names = ["base_SdssCentroid", "base_SdssShape",
+                                     "extensions_photometryKron_KronFlux", "base_SkyCoord"]
+        msConfig.slots.centroid = "base_SdssCentroid"
+        msConfig.slots.shape = "base_SdssShape"
+    msConfig.slots.apFlux = "extensions_photometryKron_KronFlux"
+    msConfig.slots.modelFlux = None
+    msConfig.slots.psfFlux = None
+    msConfig.slots.instFlux = None
+    #msConfig.algorithms.names.remove("correctfluxes")
+    msConfig.plugins["extensions_photometryKron_KronFlux"].nSigmaForRadius = nsigma
+    msConfig.plugins["extensions_photometryKron_KronFlux"].nIterForRadius = nIterForRadius
+    msConfig.plugins["extensions_photometryKron_KronFlux"].nRadiusForFlux = kfac
+    msConfig.plugins["extensions_photometryKron_KronFlux"].enforceMinimumRadius = False
     return msConfig
 
 def measureFree(exposure, center, msConfig):
     """Unforced measurement"""
     schema = afwTable.SourceTable.makeMinimalSchema()
-    schema.setVersion(0)
-    ms = msConfig.makeMeasureSources(schema)
-
-    table = afwTable.SourceTable.make(schema)
-    msConfig.slots.setupTable(table)
-    source = table.makeRecord()
-
+    task = measBase.SingleFrameMeasurementTask(schema, config=msConfig)
+    measCat = afwTable.SourceCatalog(schema)
+    source = measCat.addNew()
     ss = afwDetection.FootprintSet(exposure.getMaskedImage(), afwDetection.Threshold(0.1))
     fp = ss.getFootprints()[0]
     source.setFootprint(fp)
-
-    ms.apply(source, exposure, center)
+    task.run(measCat, exposure)
 
     return source
 
-# this test should be re-enabled after conversion to meas_base framework on DM-982;
-# at present, it uses an old interface that's only on the HSC side
-@unittest.skip("interface unsupported in LSST meas_algorithms")
-def measureForced(exposure, refSource, refWcs, msConfig):
+def measureForced(exposure, source, refWcs, msConfig):
     """Forced measurement"""
     schema = afwTable.SourceTable.makeMinimalSchema()
-    schema.setVersion(0)
-    ms = msConfig.makeMeasureSources(schema, isForced=True)
-    forcedTable = afwTable.SourceTable.make(schema)
-    forced = forcedTable.makeRecord()
-    ms.applyForced(forced, exposure, refSource, refWcs)
-    return forced
-
+    task = measBase.ForcedMeasurementTask(schema, config=msConfig)
+    forcedCat = task.run(exposure, [source], refWcs).sources
+    return forcedCat[0]
 
 class KronPhotometryTestCase(tests.TestCase):
     """A test case for measuring Kron quantities"""
@@ -190,7 +192,6 @@ class KronPhotometryTestCase(tests.TestCase):
 
             if display:
                 ds9.mtv(self.objImg, frame=ds9Frame, title="%g %g" % (a, b))
-
         if display:
             if not makeImage:
                 ds9.erase(frame=ds9Frame)
@@ -221,18 +222,23 @@ class KronPhotometryTestCase(tests.TestCase):
         # Now measure things
         #
         center = afwGeom.Point2D(xcen, ycen)
-        msConfig = makeSourceMeasurementConfig(nsigma, nIterForRadius, kfac)
+        msConfig = makeSourceMeasurementConfig(False, nsigma, nIterForRadius, kfac)
         source = measureFree(objImg, center, msConfig)
 
-        R_K = source.get("flux.kron.radius")
-        flux_K = source.get("flux.kron")
-        fluxErr_K = source.get("flux.kron.err")
-        flags_K = source.get("flux.kron.flags")
-
+        R_K = source.get("extensions_photometryKron_KronFlux_radius")
+        flux_K = source.get("extensions_photometryKron_KronFlux_flux")
+        fluxErr_K = source.get("extensions_photometryKron_KronFlux_fluxSigma")
+        flags_K = source.get("extensions_photometryKron_KronFlux_flag")
         if not flags_K:
             # Forced measurement on the same image should produce exactly the same result
+            msConfig = makeSourceMeasurementConfig(True, nsigma, nIterForRadius, kfac)
             forced = measureForced(objImg, source, objImg.getWcs(), msConfig)
-            for field in ("flux.kron", "flux.kron.err", "flux.kron.radius", "flux.kron.flags"):
+            for field in (
+                "extensions_photometryKron_KronFlux_flux",
+                "extensions_photometryKron_KronFlux_fluxSigma",
+                "extensions_photometryKron_KronFlux_radius",
+                "extensions_photometryKron_KronFlux_flag"
+            ):
                 try:
                     if np.isnan(source.get(field)):
                         self.assertTrue(np.isnan(forced.get(field)))
@@ -250,7 +256,7 @@ class KronPhotometryTestCase(tests.TestCase):
             shape = source.getShape()
             if True:                    # nsigma*shape, the radius used to estimate R_K
                 shape = shape.clone()
-                shape.scale(source.get("flux.kron.radiusForRadius")/shape.getDeterminantRadius())
+                shape.scale(source.get("extensions_photometryKron_KronFlux_radiusForRadius")/shape.getDeterminantRadius())
                 ds9.dot(shape, xc, yc, ctype=ds9.MAGENTA, frame=ds9Frame)
             # Show R_K
             shape = shape.clone()
@@ -259,7 +265,8 @@ class KronPhotometryTestCase(tests.TestCase):
                 ds9.dot(shape, xc, yc, ctype=ct, frame=ds9Frame)
 
         return R_K, flux_K, fluxErr_K, flags_K, \
-            source.get("flux.kron.flags.radius"), source.get("flux.kron.flags.smallRadius")
+            source.get("extensions_photometryKron_KronFlux_flag_radius"), \
+            source.get("extensions_photometryKron_KronFlux_flag_small_radius")
 
     def measureKronInPython(self, objImg, xcen, ycen, nsigma, kfac, nIterForRadius, makeImage=None):
         """Measure the Kron quantities of an elliptical Gaussian in python
@@ -269,21 +276,10 @@ class KronPhotometryTestCase(tests.TestCase):
         #
         # Measure moments using SDSS shape algorithm
         #
-        msConfig = measAlg.SourceMeasurementConfig()
-        if False:                       # requires #2546
-            msConfig.centroider = None
-            msConfig.slots.centroid = None
-
-        schema = afwTable.SourceTable.makeMinimalSchema()
-        schema.setVersion(0)
-        ms = msConfig.makeMeasureSources(schema)
-        table = afwTable.SourceTable.make(schema)
-        msConfig.slots.setupTable(table)
-        source = table.makeRecord()
-        fp = afwDetection.Footprint(objImg.getBBox())
-        source.setFootprint(fp)
+        # Note: this code was converted to the new meas_framework, but is not exercised.
+        msConfig = makeSourceMeasurementConfig(False, nsigma, nIterForRadius, kfac)
         center = afwGeom.Point2D(xcen, ycen)
-        ms.apply(source, objImg, center)
+        source = measureFree(objImg, center, msConfig)
 
         Mxx = source.getIxx()
         Mxy = source.getIxy()
@@ -372,13 +368,13 @@ class KronPhotometryTestCase(tests.TestCase):
 
                             makeImage = True
                             for kfac in (1.5, 2.5,):        # multiple of R_Kron to use for Flux_Kron
-                                R_K, flux_K, fluxErr_K, flags_K, flags_radius, flags_smallRadius = \
+                                R_K, flux_K, fluxErr_K, flags_K, flags_radius, flags_small_radius = \
                                     self.makeAndMeasure(measureKron, a, b, theta, dx=dx, dy=dy, kfac=kfac,
                                                         nIterForRadius=nIter, makeImage=makeImage)
                                 makeImage = False
 
                                 self.assertFalse(flags_radius)
-                                self.assertFalse(flags_smallRadius)
+                                self.assertFalse(flags_small_radius)
                                 #
                                 # We'll have to correct for the pixelisation as we sum over the central
                                 # few pixels when making models, mostly do deal with b ~ 0.5 models.
@@ -433,12 +429,12 @@ class KronPhotometryTestCase(tests.TestCase):
         for cen in (10, 20, 38, 40, 50, self.width - 10):
             makeImage = True
             for kfac in (2.5, 10,):
-                R_K, flux_K, fluxErr_K, flags_K, flags_radius, flags_smallRadius = \
+                R_K, flux_K, fluxErr_K, flags_K, flags_radius, flags_small_radius = \
                     self.makeAndMeasure(self.measureKron, a, b, theta, makeImage=makeImage,
                                         xcen=cen, ycen=cen, kfac=kfac)
                 makeImage = False
 
-                msg = "flux.kron.flags.radius: cen = (%g, %g), kfac = %g" % (cen, cen, kfac)
+                msg = "KronFlux_flag_radius: cen = (%g, %g), kfac = %g" % (cen, cen, kfac)
 
                 if kfac == 2.5 and (cen <= 20 or cen > self.width - 20):
                     self.assertTrue(flags_K, msg)
@@ -507,7 +503,6 @@ class KronPhotometryTestCase(tests.TestCase):
     def testForced(self):
         """Check that forced photometry works in the presence of rotations and translations"""
         kfac = 2.5
-        msConfig = makeSourceMeasurementConfig(kfac=kfac)
         warper = afwMath.Warper("lanczos4")
         a = 13
         for axisRatio in (0.25, 1.0):
@@ -516,8 +511,9 @@ class KronPhotometryTestCase(tests.TestCase):
                 width, height = 256, 256
                 center = afwGeom.Point2D(0.5*width, 0.5*height)
                 original = makeGalaxy(width, height, 1000.0, a, b, theta)
+                msConfig = makeSourceMeasurementConfig(forced=False, kfac=kfac)
                 source = measureFree(original, center, msConfig)
-                if source.get("flux.kron.flags"):
+                if source.get("extensions_photometryKron_KronFlux_flag"):
                     continue
 
                 angleList = [45, 90,]
@@ -534,13 +530,17 @@ class KronPhotometryTestCase(tests.TestCase):
                                            pixelScale*sinAngle, -pixelScale*sinAngle, pixelScale*cosAngle)
 
                     warped = warper.warpExposure(wcs, original)
+                    # add a Psf if there is none.  The new SdssCentroid needs a Psf.
+                    if warped.getPsf() == None:
+                        warped.setPsf(afwDetection.GaussianPsf(11, 11, 0.01))
+                    msConfig = makeSourceMeasurementConfig(kfac=kfac, forced=True)
                     forced = measureForced(warped, source, original.getWcs(), msConfig)
 
                     if display:
                         ds9.mtv(original, frame=1)
                         shape = source.getShape().clone()
                         xc, yc = source.getCentroid()
-                        radius = source.get("flux.kron.radius")
+                        radius = source.get("extensions_photometryKron_KronFlux_radius")
                         for r, ct in [(radius, ds9.BLUE), (radius*kfac, ds9.CYAN),]:
                             shape.scale(r/shape.getDeterminantRadius())
                             ds9.dot(shape, xc, yc, ctype=ct, frame=1)
@@ -548,22 +548,33 @@ class KronPhotometryTestCase(tests.TestCase):
                         transform = (wcs.linearizeSkyToPixel(source.getCoord())*
                                      original.getWcs().linearizePixelToSky(source.getCoord()))
                         shape = shape.transform(transform.getLinear())
-                        radius = forced.get("flux.kron.radius")
+                        radius = source.get("extensions_photometryKron_KronFlux_radius")
                         xc, yc = wcs.skyToPixel(source.getCoord()) - afwGeom.Extent2D(warped.getXY0())
                         for r, ct in [(radius, ds9.BLUE), (radius*kfac, ds9.CYAN),]:
                             shape.scale(r/shape.getDeterminantRadius())
                             ds9.dot(shape, xc, yc, ctype=ct, frame=2)
-
                     try:
-                        self.assertClose(source.get("flux.kron"), forced.get("flux.kron"),
-                                         rtol=2.0e-4, atol=None)
-                        self.assertClose(source.get("flux.kron.radius"), scale*forced.get("flux.kron.radius"),
-                                         rtol=None, atol=1.0e-12)
-                        self.assertEqual(source.get("flux.kron.flags"), forced.get("flux.kron.flags"))
+                        self.assertClose(source.get("extensions_photometryKron_KronFlux_flux"),
+                                            forced.get("extensions_photometryKron_KronFlux_flux"),
+                                            rtol=1.0e-3
+                                        )
+                        x1 = source.get("extensions_photometryKron_KronFlux_radius")
+                        x2 = scale*forced.get("extensions_photometryKron_KronFlux_radius")
+                        self.assertClose(source.get("extensions_photometryKron_KronFlux_radius"), 
+                                            scale*forced.get("extensions_photometryKron_KronFlux_radius"),
+                                            rtol=1.0e-3
+                                        )
+                        self.assertEqual(source.get("extensions_photometryKron_KronFlux_flag"), 
+                                        forced.get("extensions_photometryKron_KronFlux_flag")
+                                        )
                     except:
                         print ("Failed:", angle, scale, offset,
                                [(source.get(f), forced.get(f)) for f in
-                                ("flux.kron", "flux.kron.radius", "flux.kron.flags")])
+                                   ("extensions_photometryKron_KronFlux_flux", 
+                                        "extensions_photometryKron_KronFlux_radius", 
+                                       "extensions_photometryKron_KronFlux_flag" 
+                                   )
+                               ])
                         raise
 
 
