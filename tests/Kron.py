@@ -116,24 +116,24 @@ def makeSourceMeasurementConfig(forced=False, nsigma=6.0, nIterForRadius=1, kfac
     if forced:
         msConfig = measBase.ForcedMeasurementConfig()
         msConfig.algorithms.names = ["base_TransformedCentroid", "base_TransformedShape",
-                                     "extensions_photometryKron_KronFlux"]
+                                     "ext_photometryKron_KronFlux"]
         msConfig.slots.centroid = "base_TransformedCentroid"
         msConfig.slots.shape = "base_TransformedShape"
     else:
         msConfig = measBase.SingleFrameMeasurementConfig()
         msConfig.algorithms.names = ["base_SdssCentroid", "base_SdssShape",
-                                     "extensions_photometryKron_KronFlux", "base_SkyCoord"]
+                                     "ext_photometryKron_KronFlux", "base_SkyCoord"]
         msConfig.slots.centroid = "base_SdssCentroid"
         msConfig.slots.shape = "base_SdssShape"
-    msConfig.slots.apFlux = "extensions_photometryKron_KronFlux"
+    msConfig.slots.apFlux = "ext_photometryKron_KronFlux"
     msConfig.slots.modelFlux = None
     msConfig.slots.psfFlux = None
     msConfig.slots.instFlux = None
     #msConfig.algorithms.names.remove("correctfluxes")
-    msConfig.plugins["extensions_photometryKron_KronFlux"].nSigmaForRadius = nsigma
-    msConfig.plugins["extensions_photometryKron_KronFlux"].nIterForRadius = nIterForRadius
-    msConfig.plugins["extensions_photometryKron_KronFlux"].nRadiusForFlux = kfac
-    msConfig.plugins["extensions_photometryKron_KronFlux"].enforceMinimumRadius = False
+    msConfig.plugins["ext_photometryKron_KronFlux"].nSigmaForRadius = nsigma
+    msConfig.plugins["ext_photometryKron_KronFlux"].nIterForRadius = nIterForRadius
+    msConfig.plugins["ext_photometryKron_KronFlux"].nRadiusForFlux = kfac
+    msConfig.plugins["ext_photometryKron_KronFlux"].enforceMinimumRadius = False
     return msConfig
 
 def measureFree(exposure, center, msConfig):
@@ -225,19 +225,19 @@ class KronPhotometryTestCase(tests.TestCase):
         msConfig = makeSourceMeasurementConfig(False, nsigma, nIterForRadius, kfac)
         source = measureFree(objImg, center, msConfig)
 
-        R_K = source.get("extensions_photometryKron_KronFlux_radius")
-        flux_K = source.get("extensions_photometryKron_KronFlux_flux")
-        fluxErr_K = source.get("extensions_photometryKron_KronFlux_fluxSigma")
-        flags_K = source.get("extensions_photometryKron_KronFlux_flag")
+        R_K = source.get("ext_photometryKron_KronFlux_radius")
+        flux_K = source.get("ext_photometryKron_KronFlux_flux")
+        fluxErr_K = source.get("ext_photometryKron_KronFlux_fluxSigma")
+        flags_K = source.get("ext_photometryKron_KronFlux_flag")
         if not flags_K:
             # Forced measurement on the same image should produce exactly the same result
             msConfig = makeSourceMeasurementConfig(True, nsigma, nIterForRadius, kfac)
             forced = measureForced(objImg, source, objImg.getWcs(), msConfig)
             for field in (
-                "extensions_photometryKron_KronFlux_flux",
-                "extensions_photometryKron_KronFlux_fluxSigma",
-                "extensions_photometryKron_KronFlux_radius",
-                "extensions_photometryKron_KronFlux_flag"
+                "ext_photometryKron_KronFlux_flux",
+                "ext_photometryKron_KronFlux_fluxSigma",
+                "ext_photometryKron_KronFlux_radius",
+                "ext_photometryKron_KronFlux_flag"
             ):
                 try:
                     if np.isnan(source.get(field)):
@@ -256,7 +256,7 @@ class KronPhotometryTestCase(tests.TestCase):
             shape = source.getShape()
             if True:                    # nsigma*shape, the radius used to estimate R_K
                 shape = shape.clone()
-                shape.scale(source.get("extensions_photometryKron_KronFlux_radiusForRadius")/shape.getDeterminantRadius())
+                shape.scale(source.get("ext_photometryKron_KronFlux_radiusForRadius")/shape.getDeterminantRadius())
                 ds9.dot(shape, xc, yc, ctype=ds9.MAGENTA, frame=ds9Frame)
             # Show R_K
             shape = shape.clone()
@@ -265,8 +265,8 @@ class KronPhotometryTestCase(tests.TestCase):
                 ds9.dot(shape, xc, yc, ctype=ct, frame=ds9Frame)
 
         return R_K, flux_K, fluxErr_K, flags_K, \
-            source.get("extensions_photometryKron_KronFlux_flag_radius"), \
-            source.get("extensions_photometryKron_KronFlux_flag_small_radius")
+            source.get("ext_photometryKron_KronFlux_flag_radius"), \
+            source.get("ext_photometryKron_KronFlux_flag_small_radius")
 
     def measureKronInPython(self, objImg, xcen, ycen, nsigma, kfac, nIterForRadius, makeImage=None):
         """Measure the Kron quantities of an elliptical Gaussian in python
@@ -513,7 +513,7 @@ class KronPhotometryTestCase(tests.TestCase):
                 original = makeGalaxy(width, height, 1000.0, a, b, theta)
                 msConfig = makeSourceMeasurementConfig(forced=False, kfac=kfac)
                 source = measureFree(original, center, msConfig)
-                if source.get("extensions_photometryKron_KronFlux_flag"):
+                if source.get("ext_photometryKron_KronFlux_flag"):
                     continue
 
                 angleList = [45, 90,]
@@ -540,7 +540,7 @@ class KronPhotometryTestCase(tests.TestCase):
                         ds9.mtv(original, frame=1)
                         shape = source.getShape().clone()
                         xc, yc = source.getCentroid()
-                        radius = source.get("extensions_photometryKron_KronFlux_radius")
+                        radius = source.get("ext_photometryKron_KronFlux_radius")
                         for r, ct in [(radius, ds9.BLUE), (radius*kfac, ds9.CYAN),]:
                             shape.scale(r/shape.getDeterminantRadius())
                             ds9.dot(shape, xc, yc, ctype=ct, frame=1)
@@ -548,31 +548,31 @@ class KronPhotometryTestCase(tests.TestCase):
                         transform = (wcs.linearizeSkyToPixel(source.getCoord())*
                                      original.getWcs().linearizePixelToSky(source.getCoord()))
                         shape = shape.transform(transform.getLinear())
-                        radius = source.get("extensions_photometryKron_KronFlux_radius")
+                        radius = source.get("ext_photometryKron_KronFlux_radius")
                         xc, yc = wcs.skyToPixel(source.getCoord()) - afwGeom.Extent2D(warped.getXY0())
                         for r, ct in [(radius, ds9.BLUE), (radius*kfac, ds9.CYAN),]:
                             shape.scale(r/shape.getDeterminantRadius())
                             ds9.dot(shape, xc, yc, ctype=ct, frame=2)
                     try:
-                        self.assertClose(source.get("extensions_photometryKron_KronFlux_flux"),
-                                            forced.get("extensions_photometryKron_KronFlux_flux"),
+                        self.assertClose(source.get("ext_photometryKron_KronFlux_flux"),
+                                            forced.get("ext_photometryKron_KronFlux_flux"),
                                             rtol=1.0e-3
                                         )
-                        x1 = source.get("extensions_photometryKron_KronFlux_radius")
-                        x2 = scale*forced.get("extensions_photometryKron_KronFlux_radius")
-                        self.assertClose(source.get("extensions_photometryKron_KronFlux_radius"), 
-                                            scale*forced.get("extensions_photometryKron_KronFlux_radius"),
+                        x1 = source.get("ext_photometryKron_KronFlux_radius")
+                        x2 = scale*forced.get("ext_photometryKron_KronFlux_radius")
+                        self.assertClose(source.get("ext_photometryKron_KronFlux_radius"),
+                                            scale*forced.get("ext_photometryKron_KronFlux_radius"),
                                             rtol=1.0e-3
                                         )
-                        self.assertEqual(source.get("extensions_photometryKron_KronFlux_flag"), 
-                                        forced.get("extensions_photometryKron_KronFlux_flag")
+                        self.assertEqual(source.get("ext_photometryKron_KronFlux_flag"),
+                                        forced.get("ext_photometryKron_KronFlux_flag")
                                         )
                     except:
                         print ("Failed:", angle, scale, offset,
                                [(source.get(f), forced.get(f)) for f in
-                                   ("extensions_photometryKron_KronFlux_flux", 
-                                        "extensions_photometryKron_KronFlux_radius", 
-                                       "extensions_photometryKron_KronFlux_flag" 
+                                   ("ext_photometryKron_KronFlux_flux",
+                                        "ext_photometryKron_KronFlux_radius",
+                                       "ext_photometryKron_KronFlux_flag"
                                    )
                                ])
                         raise
