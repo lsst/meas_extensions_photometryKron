@@ -23,6 +23,7 @@
 from .kronLib import *
 from .version import *
 
-import lsst.meas.algorithms
-lsst.meas.algorithms.AlgorithmRegistry.register("flux.kron", KronFluxControl)
+import lsst.meas.base
+lsst.meas.base.wrapSimpleAlgorithm(KronFluxAlgorithm, name="ext_photometryKron_KronFlux",
+    Control=KronFluxControl, executionOrder=2.0)
 del lsst # cleanup namespace

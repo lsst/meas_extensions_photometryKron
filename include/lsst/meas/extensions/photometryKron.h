@@ -23,16 +23,24 @@
 #ifndef LSST_MEAS_EXTENSIONS_PHOTOMETRY_KRON_H
 #define LSST_MEAS_EXTENSIONS_PHOTOMETRY_KRON_H
 
-#include "lsst/meas/algorithms/FluxControl.h"
+#include "lsst/pex/config.h"
+#include "lsst/afw/image/Exposure.h"
+#include "lsst/meas/base/Algorithm.h"
+#include "lsst/meas/base/FluxUtilities.h"
+#include "lsst/meas/base/CentroidUtilities.h"
+#include "lsst/meas/base/FlagHandler.h"
+#include "lsst/meas/base/InputUtilities.h"
 
 namespace lsst { namespace meas { namespace extensions { namespace photometryKron {
+
+struct KronAperture;
 
 /**
  *  @brief C++ control object for Kron flux.
  *
  *  @sa KronFluxConfig.
  */
-class KronFluxControl : public algorithms::FluxControl {
+class KronFluxControl {
 public:
 
     LSST_CONTROL_FIELD(fixed, bool,
@@ -53,7 +61,7 @@ public:
                        "Smooth image with N(0, smoothingSigma^2) Gaussian while estimating R_K");
 
     KronFluxControl() :
-        algorithms::FluxControl("flux.kron"), fixed(false),
+        fixed(false),
         nSigmaForRadius(6.0),
         nIterForRadius(1),
         nRadiusForFlux(2.5),
@@ -63,12 +71,78 @@ public:
         useFootprintRadius(false),
         smoothingSigma(-1.0)
     {}
+};
+
+/**
+ *  @brief A measurement algorithm that estimates flux using Kron photometry
+ */
+class KronFluxAlgorithm : public base::SimpleAlgorithm {
+public:
+
+    enum {
+        FAILURE=base::FlagHandler::FAILURE,
+        EDGE,
+        NO_SHAPE_NO_PSF,
+        NO_MINIMUM_RADIUS,
+        NO_FALLBACK_RADIUS,
+        BAD_SHAPE,
+        BAD_RADIUS,
+        SMALL_RADIUS,
+        USED_MINIMUM_RADIUS,
+        USED_PSF_RADIUS,
+        N_FLAGS
+    };
+
+    /// A typedef to the Control object for this algorithm, defined above.
+    /// The control object contains the configuration parameters for this algorithm.
+    typedef KronFluxControl Control;
+
+    KronFluxAlgorithm(Control const & ctrl, std::string const & name, afw::table::Schema & schema);
 
 private:
-    virtual PTR(algorithms::AlgorithmControl) _clone() const;
-    virtual PTR(algorithms::Algorithm) _makeAlgorithm(
-        afw::table::Schema & schema, PTR(daf::base::PropertyList) const & metadata
+
+    virtual void measure(
+        afw::table::SourceRecord & measRecord,
+        afw::image::Exposure<float> const & exposure
     ) const;
+
+    virtual void measure(
+        afw::table::SourceRecord & measRecord,
+        afw::image::Exposure<float> const & exposure,
+        afw::table::SourceRecord const & refRecord,
+        afw::image::Wcs const & refWcs
+    ) const;
+
+    virtual void fail(
+        afw::table::SourceRecord & measRecord,
+        meas::base::MeasurementError * error=NULL
+    ) const;
+
+    void _applyAperture(
+        afw::table::SourceRecord & source,
+        afw::image::Exposure<float> const& exposure,
+        KronAperture const& aperture
+        ) const;
+
+    void _applyForced(
+        afw::table::SourceRecord & source,
+        afw::image::Exposure<float> const & exposure,
+        afw::geom::Point2D const & center,
+        afw::table::SourceRecord const & reference,
+        afw::geom::AffineTransform const & refToMeas
+    ) const;
+
+    PTR(KronAperture) _fallbackRadius(afw::table::SourceRecord& source, double const R_K_psf,
+                                      pex::exceptions::Exception& exc) const;
+
+    std::string _name;
+    Control _ctrl;
+    meas::base::FluxResultKey _fluxResultKey;
+    afw::table::Key<float> _radiusKey;
+    afw::table::Key<float> _radiusForRadiusKey;
+    afw::table::Key<float> _psfRadiusKey;
+    meas::base::FlagHandler _flagHandler;
+    meas::base::SafeCentroidExtractor _centroidExtractor;
 };
 
 }}}} // namespace lsst::meas::extensions::photometryKron
