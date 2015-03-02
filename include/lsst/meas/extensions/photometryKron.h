@@ -99,14 +99,12 @@ public:
 
     KronFluxAlgorithm(Control const & ctrl, std::string const & name, afw::table::Schema & schema);
 
-private:
-
     virtual void measure(
         afw::table::SourceRecord & measRecord,
         afw::image::Exposure<float> const & exposure
     ) const;
 
-    virtual void measure(
+    virtual void measureForced(
         afw::table::SourceRecord & measRecord,
         afw::image::Exposure<float> const & exposure,
         afw::table::SourceRecord const & refRecord,
@@ -117,6 +115,8 @@ private:
         afw::table::SourceRecord & measRecord,
         meas::base::MeasurementError * error=NULL
     ) const;
+
+private:
 
     void _applyAperture(
         afw::table::SourceRecord & source,

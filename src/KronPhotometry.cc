@@ -606,7 +606,7 @@ void KronFluxAlgorithm::measure(
     if (bad) _flagHandler.setValue(source, FAILURE, true);
 }
 
-void KronFluxAlgorithm::measure(
+void KronFluxAlgorithm::measureForced(
         afw::table::SourceRecord & measRecord,
         afw::image::Exposure<float> const & exposure,
         afw::table::SourceRecord const & refRecord,
