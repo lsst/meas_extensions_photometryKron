@@ -41,10 +41,6 @@ Interface to Kron magnitudes
 #include "lsst/afw/detection.h"
 #include "lsst/afw/table.h"
 #include "lsst/meas/base.h"
-#define PY_ARRAY_UNIQUE_SYMBOL LSST_MEAS_BASE_NUMPY_ARRAY_API
-#include "numpy/arrayobject.h"
-#include "ndarray/swig.h"
-#include "ndarray/swig/eigen.h"
 %}
 
 %include "ndarray.i"
@@ -57,12 +53,8 @@ Interface to Kron magnitudes
 %import "lsst/afw/image/imageLib.i"
 %import "lsst/afw/detection/detectionLib.i"
 %import "lsst/afw/table/tableLib.i"
-
-%include "lsst/meas/base/constants.h"
-%include "lsst/meas/base/exceptions.i"
-%include "lsst/meas/base/utilities.i"
-%include "lsst/meas/base/Algorithm.h"
-%import "lsst/pex/config.h"
+%import "lsst/meas/base/baseLib.i"
+%include "lsst/pex/config.h"
 
 %{
 #include "lsst/meas/extensions/photometryKron.h"
