@@ -43,11 +43,10 @@ Interface to Kron magnitudes
 #include "lsst/meas/base.h"
 %}
 
-%include "ndarray.i"
-%declareNumPyConverters(lsst::meas::base::CentroidCov);
-%lsst_exceptions();
-
 %include "lsst/p_lsstSwig.i"
+%initializeNumPy(meas_extensions_photometryKron)
+
+%lsst_exceptions();
 
 %import "lsst/afw/math/mathLib.i"
 %import "lsst/afw/image/imageLib.i"
