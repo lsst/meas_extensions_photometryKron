@@ -30,13 +30,13 @@ or
    >>> import Kron; Kron.run()
 """
 
-import math, os, sys, unittest
+import math
+import unittest
+
 import numpy as np
 import itertools
 import lsst.utils.tests as tests
-import lsst.pex.exceptions as pexExceptions
 import lsst.pex.logging as pexLogging
-import lsst.pex.policy as pexPolicy
 import lsst.afw.detection as afwDetection
 import lsst.afw.geom as afwGeom
 import lsst.afw.geom.ellipses as afwEllipses
@@ -46,7 +46,8 @@ import lsst.afw.math as afwMath
 import lsst.afw.table as afwTable
 import lsst.meas.algorithms as measAlg
 import lsst.meas.base as measBase
-import lsst.meas.extensions.photometryKron as Kron
+# importing this package registers essential code
+import lsst.meas.extensions.photometryKron
 
 try:
     type(verbose)
