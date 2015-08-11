@@ -25,5 +25,5 @@ from .version import *
 
 import lsst.meas.base
 lsst.meas.base.wrapSimpleAlgorithm(KronFluxAlgorithm, name="ext_photometryKron_KronFlux",
-    Control=KronFluxControl, executionOrder=2.0)
+    Control=KronFluxControl, executionOrder=2.0, shouldApCorr=True)
 del lsst # cleanup namespace
