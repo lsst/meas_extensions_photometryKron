@@ -155,7 +155,7 @@ def measureForced(exposure, source, refWcs, msConfig):
     refCat.append(source)
     schema = afwTable.SourceTable.makeMinimalSchema()
     task = measBase.ForcedMeasurementTask(schema, config=msConfig)
-    measCat = task.generateSources(exposure, refCat, refWcs)
+    measCat = task.generateMeasCat(exposure, refCat, refWcs)
     task.attachTransformedFootprints(measCat, refCat, exposure, refWcs)
     task.run(measCat, exposure, refCat, refWcs)
     return measCat[0]
