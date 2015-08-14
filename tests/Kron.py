@@ -593,8 +593,6 @@ class KronPhotometryTestCase(tests.TestCase):
                                             forced.get("ext_photometryKron_KronFlux_flux"),
                                             rtol=1.0e-3
                                         )
-                        x1 = source.get("ext_photometryKron_KronFlux_radius")
-                        x2 = scale*forced.get("ext_photometryKron_KronFlux_radius")
                         self.assertClose(source.get("ext_photometryKron_KronFlux_radius"),
                                             scale*forced.get("ext_photometryKron_KronFlux_radius"),
                                             rtol=1.0e-3
