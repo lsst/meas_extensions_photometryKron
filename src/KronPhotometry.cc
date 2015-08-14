@@ -550,7 +550,6 @@ void KronFluxAlgorithm::measure(
         aperture.reset(new KronAperture(source));
     } else {
         try {
-            afw::geom::ellipses::Axes axes(source.getShape()); 
             aperture = KronAperture::determine(mimage, axes, center, _ctrl, &radiusForRadius);
         } catch (pex::exceptions::OutOfRangeError& e) {
             // We hit the edge of the image: no reasonable fallback or recovery possible

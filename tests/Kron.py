@@ -30,13 +30,13 @@ or
    >>> import Kron; Kron.run()
 """
 
-import math, os, sys, unittest
+import math
+import unittest
+
 import numpy as np
 import itertools
 import lsst.utils.tests as tests
-import lsst.pex.exceptions as pexExceptions
 import lsst.pex.logging as pexLogging
-import lsst.pex.policy as pexPolicy
 import lsst.afw.detection as afwDetection
 import lsst.afw.geom as afwGeom
 import lsst.afw.geom.ellipses as afwEllipses
@@ -46,7 +46,8 @@ import lsst.afw.math as afwMath
 import lsst.afw.table as afwTable
 import lsst.meas.algorithms as measAlg
 import lsst.meas.base as measBase
-import lsst.meas.extensions.photometryKron as Kron
+# importing this package registers essential code
+import lsst.meas.extensions.photometryKron
 
 try:
     type(verbose)
@@ -111,7 +112,7 @@ def makeGalaxy(width, height, flux, a, b, theta, dx=0.0, dy=0.0, xy0=None, xcen=
     exp.setPsf(afwDetection.GaussianPsf(11, 11, 0.01))
     return exp
 
-def makeMeasurementConfig(forced=False, nsigma=6.0, nIterForRadius=1, kfac=2.5):
+def makeMeasurementConfig(forced=False, nsigma=6.0, nIterForRadius=1, kfac=2.5, doApplyApCorr="noButWarn"):
     """Construct a (SingleFrame|Forced)MeasurementConfig with the requested parameters"""
     if forced:
         msConfig = measBase.ForcedMeasurementConfig()
@@ -135,7 +136,25 @@ def makeMeasurementConfig(forced=False, nsigma=6.0, nIterForRadius=1, kfac=2.5):
     msConfig.plugins["ext_photometryKron_KronFlux"].nIterForRadius = nIterForRadius
     msConfig.plugins["ext_photometryKron_KronFlux"].nRadiusForFlux = kfac
     msConfig.plugins["ext_photometryKron_KronFlux"].enforceMinimumRadius = False
+    msConfig.doApplyApCorr = doApplyApCorr
     return msConfig
+
+def addApCorrMap(exposure, value):
+    """Add a simple constant aperture correction map to an exposure
+    """
+    ctrl = afwMath.ChebyshevBoundedFieldControl()
+    ctrl.orderX = 0
+    ctrl.orderY = 0
+    ctrl.triangular = False
+    fluxCoeffs = np.array([value], ndmin=2, dtype=float)
+    fluxField = lsst.afw.math.ChebyshevBoundedField(exposure.getBBox(), fluxCoeffs)
+    sigmaCoeffs = np.array([0.0], ndmin=2, dtype=float)
+    sigmaField = lsst.afw.math.ChebyshevBoundedField(exposure.getBBox(), sigmaCoeffs)
+    apCorrMap = afwImage.ApCorrMap()
+    apCorrMap["ext_photometryKron_KronFlux_flux"] = fluxField
+    apCorrMap["ext_photometryKron_KronFlux_fluxSigma"] = sigmaField
+    expInfo = exposure.getInfo()
+    expInfo.setApCorrMap(apCorrMap)
 
 def measureFree(exposure, center, msConfig):
     """Unforced measurement"""
@@ -174,7 +193,9 @@ class KronPhotometryTestCase(tests.TestCase):
 
     def makeAndMeasure(self, measureKron, a, b, theta, dx=0.0, dy=0.0, nsigma=6, kfac=2, nIterForRadius=1,
                        xcen=None, ycen=None,
-                       makeImage=True):
+                       makeImage=True,
+                       apCorrValue=None, # if a numeric value, use as the constant value of aperture correction
+                       ):
         """Make and measure an elliptical Gaussian"""
 
         if xcen is None:
@@ -196,6 +217,12 @@ class KronPhotometryTestCase(tests.TestCase):
 
             if display:
                 ds9.mtv(self.objImg, frame=ds9Frame, title="%g %g" % (a, b))
+
+        doApplyApCorr = "noButWarn"
+        if apCorrValue != None:
+            addApCorrMap(self.objImg, apCorrValue)
+            doApplyApCorr = "yes"
+
         if display:
             if not makeImage:
                 ds9.erase(frame=ds9Frame)
@@ -218,15 +245,15 @@ class KronPhotometryTestCase(tests.TestCase):
         self.objImg.setPsf(measAlg.DoubleGaussianPsf(ksize, ksize,
                                                      FWHM/(2*math.sqrt(2*math.log(2))), 1, 0.1))
 
-        return measureKron(self.objImg, xcen, ycen, nsigma, kfac, nIterForRadius)
+        return measureKron(self.objImg, xcen, ycen, nsigma, kfac, nIterForRadius, doApplyApCorr)
 
-    def measureKron(self, objImg, xcen, ycen, nsigma, kfac, nIterForRadius):
+    def measureKron(self, objImg, xcen, ycen, nsigma, kfac, nIterForRadius, doApplyApCorr="noButWarn"):
         """Measure Kron quantities using the C++ code"""
         #
         # Now measure things
         #
         center = afwGeom.Point2D(xcen, ycen)
-        msConfig = makeMeasurementConfig(False, nsigma, nIterForRadius, kfac)
+        msConfig = makeMeasurementConfig(False, nsigma, nIterForRadius, kfac, doApplyApCorr)
         source = measureFree(objImg, center, msConfig)
 
         R_K = source.get("ext_photometryKron_KronFlux_radius")
@@ -235,7 +262,7 @@ class KronPhotometryTestCase(tests.TestCase):
         flags_K = source.get("ext_photometryKron_KronFlux_flag")
         if not flags_K:
             # Forced measurement on the same image should produce exactly the same result
-            msConfig = makeMeasurementConfig(True, nsigma, nIterForRadius, kfac)
+            msConfig = makeMeasurementConfig(True, nsigma, nIterForRadius, kfac, doApplyApCorr)
             forced = measureForced(objImg, source, objImg.getWcs(), msConfig)
             for field in (
                 "ext_photometryKron_KronFlux_flux",
@@ -371,57 +398,61 @@ class KronPhotometryTestCase(tests.TestCase):
                                 continue
 
                             makeImage = True
-                            for kfac in (1.5, 2.5,):        # multiple of R_Kron to use for Flux_Kron
-                                R_K, flux_K, fluxErr_K, flags_K, flags_radius, flags_small_radius = \
-                                    self.makeAndMeasure(measureKron, a, b, theta, dx=dx, dy=dy, kfac=kfac,
-                                                        nIterForRadius=nIter, makeImage=makeImage)
-                                makeImage = False
+                            for apCorrValue in (None, 0.5):
+                                for kfac in (1.5, 2.5,):        # multiple of R_Kron to use for Flux_Kron
+                                    R_K, flux_K, fluxErr_K, flags_K, flags_radius, flags_small_radius = \
+                                        self.makeAndMeasure(measureKron, a, b, theta, dx=dx, dy=dy, kfac=kfac,
+                                                            nIterForRadius=nIter, makeImage=makeImage,
+                                                            apCorrValue=apCorrValue)
+                                    makeImage = False
 
-                                self.assertFalse(flags_radius)
-                                self.assertFalse(flags_small_radius)
-                                #
-                                # We'll have to correct for the pixelisation as we sum over the central
-                                # few pixels when making models, mostly do deal with b ~ 0.5 models.
-                                #
-                                # See Section 5 of
-                                #   http://www.astro.princeton.edu/~rhl/photomisc/aperture.pdf
-                                # for the source of 0.00286 etc.
-                                #
-                                R_truth0 = math.sqrt(math.pi/2)
-                                R_truth = R_truth0*math.sqrt(1 + 0.8*1/(12.0*a*b))
+                                    self.assertFalse(flags_radius)
+                                    self.assertFalse(flags_small_radius)
+                                    #
+                                    # We'll have to correct for the pixelisation as we sum over the central
+                                    # few pixels when making models, mostly do deal with b ~ 0.5 models.
+                                    #
+                                    # See Section 5 of
+                                    #   http://www.astro.princeton.edu/~rhl/photomisc/aperture.pdf
+                                    # for the source of 0.00286 etc.
+                                    #
+                                    R_truth0 = math.sqrt(math.pi/2)
+                                    R_truth = R_truth0*math.sqrt(1 + 0.8*1/(12.0*a*b))
 
-                                flux_truth = self.flux*(1 - math.exp(-0.5*(kfac*R_truth)**2))
-                                R_truth = R_truth0*math.sqrt(a*b + 1/12.0*(1 + 0.00286/min(a, b)**3.9))
+                                    flux_truth = self.flux*(1 - math.exp(-0.5*(kfac*R_truth)**2))
+                                    if apCorrValue is not None:
+                                        flux_truth = flux_truth * apCorrValue
+                                    R_truth = R_truth0*math.sqrt(a*b + 1/12.0*(1 + 0.00286/min(a, b)**3.9))
 
-                                failR = math.isnan(R_K) or flags_K or \
-                                    abs(R_truth - R_K) > 1e-2*self.getTolRad(a, b)
-                                failFlux =  math.isnan(flux_K) or flags_K or \
-                                    abs(flux_K/flux_truth - 1) > 1e-2*self.getTolFlux(a, b, kfac)
+                                    failR = math.isnan(R_K) or flags_K or \
+                                        abs(R_truth - R_K) > 1e-2*self.getTolRad(a, b)
+                                    failFlux =  math.isnan(flux_K) or flags_K or \
+                                        abs(flux_K/flux_truth - 1) > 1e-2*self.getTolFlux(a, b, kfac)
 
-                                ID = "a,b,theta %4.1f %4.1f %4.1f  dx,dy = %.1f,%.1f  kfac=%g" % \
-                                    (a, b, theta, dx, dy, kfac)
-                                if ((failR or failFlux) and verbose) or verbose > 1:
-                                    print "%s R_K    %10.3f %10.3f %6.3f pixels (tol %5.3f)%s" % \
-                                        (ID, R_K, R_truth, (R_K - R_truth), 1e-2*self.getTolRad(a, b),
-                                         " *" if failR else "")
-                                    print "%s flux_K %10.3f %10.3f %6.2f%%       (tol %5.3f) %s" % \
-                                        (ID, flux_K, flux_truth,
-                                         100*(flux_K/flux_truth - 1), self.getTolFlux(a, b, kfac),
-                                         " *" if failFlux else "")
+                                    ID = "a,b,theta %4.1f %4.1f %4.1f  dx,dy = %.1f,%.1f  kfac=%g" % \
+                                        (a, b, theta, dx, dy, kfac)
+                                    if ((failR or failFlux) and verbose) or verbose > 1:
+                                        print "%s R_K    %10.3f %10.3f %6.3f pixels (tol %5.3f)%s" % \
+                                            (ID, R_K, R_truth, (R_K - R_truth), 1e-2*self.getTolRad(a, b),
+                                             " *" if failR else "")
+                                        print "%s flux_K %10.3f %10.3f %6.2f%%       (tol %5.3f) %s" % \
+                                            (ID, flux_K, flux_truth,
+                                             100*(flux_K/flux_truth - 1), self.getTolFlux(a, b, kfac),
+                                             " *" if failFlux else "")
 
-                                if ignoreTestFailures:
-                                    continue
+                                    if ignoreTestFailures:
+                                        continue
 
-                                self.assertFalse(failR, (("%s  R_Kron: %g v. exact value %g " +
-                                                          "(error %.3f pixels; limit %.3f)") % \
-                                                             (ID, R_K, R_truth, (R_K - R_truth),
-                                                              1e-2*self.getTolRad(a, b))))
+                                    self.assertFalse(failR, (("%s  R_Kron: %g v. exact value %g " +
+                                                              "(error %.3f pixels; limit %.3f)") % \
+                                                                 (ID, R_K, R_truth, (R_K - R_truth),
+                                                                  1e-2*self.getTolRad(a, b))))
 
-                                self.assertFalse(failFlux,
-                                                 (("%s  flux_Kron: %g v. exact value %g " +
-                                                   "(error %.2f%% limit %.2f%%)") %
-                                                  (ID, flux_K, flux_truth, 100*(flux_K/flux_truth-1),
-                                                   self.getTolFlux(a, b, kfac))))
+                                    self.assertFalse(failFlux,
+                                                     (("%s  flux_Kron: %g v. exact value %g " +
+                                                       "(error %.2f%% limit %.2f%%)") %
+                                                      (ID, flux_K, flux_truth, 100*(flux_K/flux_truth-1),
+                                                       self.getTolFlux(a, b, kfac))))
 
         self.assertFalse(ignoreTestFailures, "You are ignoring possible test failures")
 
@@ -562,8 +593,6 @@ class KronPhotometryTestCase(tests.TestCase):
                                             forced.get("ext_photometryKron_KronFlux_flux"),
                                             rtol=1.0e-3
                                         )
-                        x1 = source.get("ext_photometryKron_KronFlux_radius")
-                        x2 = scale*forced.get("ext_photometryKron_KronFlux_radius")
                         self.assertClose(source.get("ext_photometryKron_KronFlux_radius"),
                                             scale*forced.get("ext_photometryKron_KronFlux_radius"),
                                             rtol=1.0e-3
