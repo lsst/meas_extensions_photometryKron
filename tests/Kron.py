@@ -111,8 +111,8 @@ def makeGalaxy(width, height, flux, a, b, theta, dx=0.0, dy=0.0, xy0=None, xcen=
     exp.setPsf(afwDetection.GaussianPsf(11, 11, 0.01))
     return exp
 
-def makeSourceMeasurementConfig(forced=False, nsigma=6.0, nIterForRadius=1, kfac=2.5):
-    """Construct a SourceMeasurementConfig with the requested parameters"""
+def makeMeasurementConfig(forced=False, nsigma=6.0, nIterForRadius=1, kfac=2.5):
+    """Construct a (SingleFrame|Forced)MeasurementConfig with the requested parameters"""
     if forced:
         msConfig = measBase.ForcedMeasurementConfig()
         msConfig.algorithms.names = ["base_TransformedCentroid", "base_TransformedShape",
@@ -129,6 +129,7 @@ def makeSourceMeasurementConfig(forced=False, nsigma=6.0, nIterForRadius=1, kfac
     msConfig.slots.modelFlux = None
     msConfig.slots.psfFlux = None
     msConfig.slots.instFlux = None
+    msConfig.slots.calibFlux = None
     #msConfig.algorithms.names.remove("correctfluxes")
     msConfig.plugins["ext_photometryKron_KronFlux"].nSigmaForRadius = nsigma
     msConfig.plugins["ext_photometryKron_KronFlux"].nIterForRadius = nIterForRadius
@@ -146,15 +147,18 @@ def measureFree(exposure, center, msConfig):
     fp = ss.getFootprints()[0]
     source.setFootprint(fp)
     task.run(measCat, exposure)
-
     return source
 
 def measureForced(exposure, source, refWcs, msConfig):
     """Forced measurement"""
+    refCat = afwTable.SourceCatalog(source.table)
+    refCat.append(source)
     schema = afwTable.SourceTable.makeMinimalSchema()
     task = measBase.ForcedMeasurementTask(schema, config=msConfig)
-    forcedCat = task.run(exposure, [source], refWcs).sources
-    return forcedCat[0]
+    measCat = task.generateSources(exposure, refCat, refWcs)
+    task.attachTransformedFootprints(measCat, refCat, exposure, refWcs)
+    task.run(measCat, exposure, refCat, refWcs)
+    return measCat[0]
 
 class KronPhotometryTestCase(tests.TestCase):
     """A test case for measuring Kron quantities"""
@@ -222,7 +226,7 @@ class KronPhotometryTestCase(tests.TestCase):
         # Now measure things
         #
         center = afwGeom.Point2D(xcen, ycen)
-        msConfig = makeSourceMeasurementConfig(False, nsigma, nIterForRadius, kfac)
+        msConfig = makeMeasurementConfig(False, nsigma, nIterForRadius, kfac)
         source = measureFree(objImg, center, msConfig)
 
         R_K = source.get("ext_photometryKron_KronFlux_radius")
@@ -231,7 +235,7 @@ class KronPhotometryTestCase(tests.TestCase):
         flags_K = source.get("ext_photometryKron_KronFlux_flag")
         if not flags_K:
             # Forced measurement on the same image should produce exactly the same result
-            msConfig = makeSourceMeasurementConfig(True, nsigma, nIterForRadius, kfac)
+            msConfig = makeMeasurementConfig(True, nsigma, nIterForRadius, kfac)
             forced = measureForced(objImg, source, objImg.getWcs(), msConfig)
             for field in (
                 "ext_photometryKron_KronFlux_flux",
@@ -277,7 +281,7 @@ class KronPhotometryTestCase(tests.TestCase):
         # Measure moments using SDSS shape algorithm
         #
         # Note: this code was converted to the new meas_framework, but is not exercised.
-        msConfig = makeSourceMeasurementConfig(False, nsigma, nIterForRadius, kfac)
+        msConfig = makeMeasurementConfig(False, nsigma, nIterForRadius, kfac)
         center = afwGeom.Point2D(xcen, ycen)
         source = measureFree(objImg, center, msConfig)
 
@@ -511,7 +515,7 @@ class KronPhotometryTestCase(tests.TestCase):
                 width, height = 256, 256
                 center = afwGeom.Point2D(0.5*width, 0.5*height)
                 original = makeGalaxy(width, height, 1000.0, a, b, theta)
-                msConfig = makeSourceMeasurementConfig(forced=False, kfac=kfac)
+                msConfig = makeMeasurementConfig(forced=False, kfac=kfac)
                 source = measureFree(original, center, msConfig)
                 if source.get("ext_photometryKron_KronFlux_flag"):
                     continue
@@ -533,7 +537,7 @@ class KronPhotometryTestCase(tests.TestCase):
                     # add a Psf if there is none.  The new SdssCentroid needs a Psf.
                     if warped.getPsf() == None:
                         warped.setPsf(afwDetection.GaussianPsf(11, 11, 0.01))
-                    msConfig = makeSourceMeasurementConfig(kfac=kfac, forced=True)
+                    msConfig = makeMeasurementConfig(kfac=kfac, forced=True)
                     forced = measureForced(warped, source, original.getWcs(), msConfig)
 
                     if display:
