@@ -247,7 +247,7 @@ struct KronAperture {
     PTR(KronAperture) transform(afw::geom::AffineTransform const& trans) const {
         afw::geom::Point2D const center = trans(getCenter());
         afw::geom::ellipses::Axes const axes(*getAxes().transform(trans.getLinear()).copy());
-        return boost::make_shared<KronAperture>(center, axes);
+        return std::make_shared<KronAperture>(center, axes);
     }
 
 private:
@@ -343,7 +343,7 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
         axes.scale(radius/axes.getDeterminantRadius()); // set axes to our current estimate of R_K
     }
 
-    return boost::make_shared<KronAperture>(center, axes);
+    return std::make_shared<KronAperture>(center, axes);
 }
 
 // Photometer an image with a particular aperture
