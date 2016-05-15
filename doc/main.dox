@@ -1,0 +1,15 @@
+namespace lsst { namespace meas { namespace extensions { namespace photometryKron
+
+/**
+\mainpage lsst::meas::extensions::photometryKron: Kron Photometry
+
+\section photometryKron_introduction Introduction
+
+Kron Photometry Measurement Extension.
+
+This package provides a \ref measBaseIntroduction "lsst.meas.base" compliant
+measurement extension capable of performing Kron photometry.
+
+ */
+
+}}}}
