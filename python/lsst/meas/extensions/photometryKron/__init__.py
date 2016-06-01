@@ -1,6 +1,6 @@
 #
 # LSST Data Management System
-# Copyright 2008-2015 LSST Corporation.
+# Copyright 2008-2016 AURA/LSST.
 #
 # This product includes software developed by the
 # LSST Project (http://www.lsst.org/).
@@ -20,10 +20,11 @@
 # see <http://www.lsstcorp.org/LegalNotices/>.
 #
 
+from lsst.meas.base import BasePlugin, wrapSimpleAlgorithm
+
 from .kronLib import *
 from .version import *
 
-import lsst.meas.base
-lsst.meas.base.wrapSimpleAlgorithm(KronFluxAlgorithm, name="ext_photometryKron_KronFlux",
-    Control=KronFluxControl, executionOrder=2.0, shouldApCorr=True)
+wrapSimpleAlgorithm(KronFluxAlgorithm, name="ext_photometryKron_KronFlux", Control=KronFluxControl,
+                    executionOrder=BasePlugin.FLUX_ORDER, shouldApCorr=True)
 del lsst # cleanup namespace

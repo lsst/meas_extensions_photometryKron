@@ -2,6 +2,6 @@ setupRequired(meas_base)
 setupOptional(meas_algorithms) # used by a unit test
 
 envPrepend(LD_LIBRARY_PATH, ${PRODUCT_DIR}/lib)
-envAppend(DYLD_LIBRARY_PATH, ${PRODUCT_DIR}/lib)
-
-envAppend(PYTHONPATH, ${PRODUCT_DIR}/python)
+envPrepend(DYLD_LIBRARY_PATH, ${PRODUCT_DIR}/lib)
+envPrepend(LSST_LIBRARY_PATH, ${PRODUCT_DIR}/lib)
+envPrepend(PYTHONPATH, ${PRODUCT_DIR}/python)
