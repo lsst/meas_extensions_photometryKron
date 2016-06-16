@@ -59,7 +59,7 @@ class KronFlagHandlerTestCase(unittest.TestCase):
         photKron.KronFluxAlgorithm(control, name, schema)
 
         # Fetch a list of all flag fields, in the order that they were added
-        # to schema (and hence the order they were added to the FlagHandler)
+        # to the schema (and hence the order they were added to the FlagHandler)
         flagFieldNames = schema.extract("%s_flag*" % (name,), ordered=True).keys()
 
         # Iterate over each flag field, checking that they were enumerated in

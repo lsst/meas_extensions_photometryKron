@@ -425,7 +425,7 @@ KronFluxAlgorithm::KronFluxAlgorithm(KronFluxControl const & ctrl, std::string c
         {"flag_bad_shape_no_psf", "bad shape and no PSF"},
         {"flag_no_minimum_radius", "minimum radius could not enforced: no minimum value or PSF"},
         {"flag_no_fallback_radius", "no minimum radius and no PSF provided"},
-        {"flag_radius", "bad Kron radius"},
+        {"flag_bad_radius", "bad Kron radius"},
         {"flag_used_minimum_radius", "used the minimum radius for the Kron aperture"},
         {"flag_used_psf_radius", "used the PSF Kron radius for the Kron aperture"},
         {"flag_small_radius", "measured Kron radius was smaller than that of the PSF"},
@@ -522,8 +522,8 @@ void KronFluxAlgorithm::measure(
         if (!exposure.getPsf()) {
             throw LSST_EXCEPT(
                 meas::base::MeasurementError,
-                _flagHandler.getDefinition(NO_SHAPE_NO_PSF).doc,
-                NO_SHAPE_NO_PSF
+                _flagHandler.getDefinition(BAD_SHAPE_NO_PSF).doc,
+                BAD_SHAPE_NO_PSF
             );
         }
         axes = exposure.getPsf()->computeShape();

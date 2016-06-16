@@ -296,7 +296,7 @@ class KronPhotometryTestCase(tests.TestCase):
                 ds9.dot(shape, xc, yc, ctype=ct, frame=ds9Frame)
 
         return R_K, flux_K, fluxErr_K, flags_K, \
-            source.get("ext_photometryKron_KronFlux_flag_radius"), \
+            source.get("ext_photometryKron_KronFlux_flag_bad_radius"), \
             source.get("ext_photometryKron_KronFlux_flag_small_radius")
 
     def measureKronInPython(self, objImg, xcen, ycen, nsigma, kfac, nIterForRadius, makeImage=None):
@@ -469,7 +469,7 @@ class KronPhotometryTestCase(tests.TestCase):
                                         xcen=cen, ycen=cen, kfac=kfac)
                 makeImage = False
 
-                msg = "KronFlux_flag_radius: cen = (%g, %g), kfac = %g" % (cen, cen, kfac)
+                msg = "KronFlux_flag_bad_radius: cen = (%g, %g), kfac = %g" % (cen, cen, kfac)
 
                 if kfac == 2.5 and (cen <= 20 or cen > self.width - 20):
                     self.assertTrue(flags_K, msg)

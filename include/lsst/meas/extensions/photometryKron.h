@@ -82,14 +82,14 @@ public:
     enum {
         FAILURE=base::FlagHandler::FAILURE,
         EDGE,
-        NO_SHAPE_NO_PSF,
+        BAD_SHAPE_NO_PSF,
         NO_MINIMUM_RADIUS,
         NO_FALLBACK_RADIUS,
-        BAD_SHAPE,
         BAD_RADIUS,
-        SMALL_RADIUS,
         USED_MINIMUM_RADIUS,
         USED_PSF_RADIUS,
+        SMALL_RADIUS,
+        BAD_SHAPE,
         N_FLAGS
     };
 
