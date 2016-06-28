@@ -61,3 +61,6 @@ Interface to Kron magnitudes
 
 %feature("notabstract") lsst::meas::extensions::photometryKron::KronFluxAlgorithm;
 %include "lsst/meas/extensions/photometryKron.h"
+
+%template(determineRadius) lsst::meas::extensions::photometryKron::KronAperture::determineRadius<lsst::afw::image::MaskedImage<float> >;
+%template(measureFlux) lsst::meas::extensions::photometryKron::KronAperture::measureFlux<lsst::afw::image::MaskedImage<float> >;

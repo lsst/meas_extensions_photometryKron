@@ -23,6 +23,9 @@
 #ifndef LSST_MEAS_EXTENSIONS_PHOTOMETRY_KRON_H
 #define LSST_MEAS_EXTENSIONS_PHOTOMETRY_KRON_H
 
+#include <memory>
+#include <cmath>
+
 #include "lsst/pex/config.h"
 #include "lsst/afw/image/Exposure.h"
 #include "lsst/meas/base/Algorithm.h"
@@ -148,6 +151,81 @@ private:
     afw::table::Key<float> _psfRadiusKey;
     meas::base::FlagHandler _flagHandler;
     meas::base::SafeCentroidExtractor _centroidExtractor;
+};
+
+class KronAperture {
+public:
+    KronAperture(afw::geom::Point2D const& center, afw::geom::ellipses::BaseCore const& core,
+                 float radiusForRadius=std::nanf("")) :
+        _center(center),
+        _axes(core),
+        _radiusForRadius(radiusForRadius)
+        {}
+
+    explicit KronAperture(afw::table::SourceRecord const& source, float radiusForRadius=std::nanf("")) :
+        _center(afw::geom::Point2D(source.getX(), source.getY())),
+        _axes(source.getShape()),
+        _radiusForRadius(radiusForRadius)
+        {}
+
+    KronAperture(afw::table::SourceRecord const& reference, afw::geom::AffineTransform const& refToMeas,
+                 double radius, float radiusForRadius=std::nanf("")) :
+        _center(refToMeas(reference.getCentroid())),
+        _axes(getKronAxes(reference.getShape(), refToMeas.getLinear(), radius)),
+        _radiusForRadius(radiusForRadius)
+        {}
+
+    /// Accessors
+    double getX() const { return _center.getX(); }
+    double getY() const { return _center.getY(); }
+    float getRadiusForRadius() const { return _radiusForRadius; }
+
+    afw::geom::Point2D const& getCenter() const { return _center; }
+
+    afw::geom::ellipses::Axes & getAxes() { return _axes; }
+
+    afw::geom::ellipses::Axes const& getAxes() const { return _axes; }
+
+
+    /// Determine the Kron Aperture from an image
+    ///
+    /// Determines the object Kron aperture, using the shape from source.getShape()
+    /// (e.g. SDSS's adaptive moments)
+    template<typename ImageT>
+    static PTR(KronAperture) determineRadius(
+        ImageT const& image,  ///< Image to measure
+        afw::geom::ellipses::Axes axes,  ///< Shape of aperture
+        afw::geom::Point2D const& center,   ///< Centre of source
+        KronFluxControl const& ctrl  ///< control the algorithm
+        );
+
+    /// Photometer within the Kron Aperture on an image
+    template<typename ImageT>
+    std::pair<double, double> measureFlux(
+        ImageT const& image,  ///< Image to measure
+        double const nRadiusForFlux,  ///< Kron radius multiplier
+        double const maxSincRadius  ///< largest radius that we use sinc apertyres
+        ) const;
+
+    /// Transform a Kron Aperture to a different frame
+    PTR(KronAperture) transform(afw::geom::AffineTransform const& trans) const {
+        afw::geom::Point2D const center = trans(getCenter());
+        afw::geom::ellipses::Axes const axes(*getAxes().transform(trans.getLinear()).copy());
+        return std::make_shared<KronAperture>(center, axes);
+    }
+
+    /// Determine Kron axes from a reference image
+    static
+    afw::geom::ellipses::Axes getKronAxes(
+        afw::geom::ellipses::Axes const& shape,
+        afw::geom::LinearTransform const& transformation,
+        double const radius
+        );
+
+private:
+    afw::geom::Point2D const _center;     // Center of aperture
+    afw::geom::ellipses::Axes _axes;      // Ellipse defining aperture shape
+    float _radiusForRadius;               // Radius used to estimate the Kron radius
 };
 
 }}}} // namespace lsst::meas::extensions::photometryKron

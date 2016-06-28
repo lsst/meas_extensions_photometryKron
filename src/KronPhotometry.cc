@@ -208,63 +208,7 @@ private:
 };
 } // end anonymous namespace
 
-
-struct KronAperture {
-    KronAperture(afw::geom::Point2D const& center, afw::geom::ellipses::BaseCore const& core) :
-        _center(center), _axes(core) {}
-    explicit KronAperture(afw::table::SourceRecord const& source) :
-        _center(afw::geom::Point2D(source.getX(), source.getY())), _axes(source.getShape()) {}
-    KronAperture(afw::table::SourceRecord const& reference, afw::geom::AffineTransform const& refToMeas,
-                 double radius) :
-        _center(refToMeas(reference.getCentroid())),
-        _axes(_getKronAxes(reference.getShape(), refToMeas.getLinear(), radius))
-        {}
-
-
-    /// Accessors
-    double getX() const { return _center.getX(); }
-    double getY() const { return _center.getY(); }
-    afw::geom::Point2D const& getCenter() const { return _center; }
-    afw::geom::ellipses::Axes & getAxes() { return _axes; }
-    afw::geom::ellipses::Axes const& getAxes() const { return _axes; }
-
-    /// Determine the Kron Aperture from an image
-    template<typename ImageT>
-    static PTR(KronAperture) determine(ImageT const& image,
-                                       afw::geom::ellipses::Axes axes,
-                                       afw::geom::Point2D const& center,
-                                       KronFluxControl const& ctrl, float *radiusForRadius
-                                      );
-
-    /// Photometer within the Kron Aperture on an image
-    template<typename ImageT>
-    std::pair<double, double> measure(ImageT const& image, // Image to measure
-                                      double const nRadiusForFlux, // Kron radius multiplier
-                                      double const maxSincRadius // largest radius that we use sinc apertyres
-                                     ) const;
-
-    /// Transform a Kron Aperture to a different frame
-    PTR(KronAperture) transform(afw::geom::AffineTransform const& trans) const {
-        afw::geom::Point2D const center = trans(getCenter());
-        afw::geom::ellipses::Axes const axes(*getAxes().transform(trans.getLinear()).copy());
-        return std::make_shared<KronAperture>(center, axes);
-    }
-
-private:
-    /// Determine Kron axes from a reference image
-    static
-    afw::geom::ellipses::Axes _getKronAxes(
-        afw::geom::ellipses::Axes const& shape,
-        afw::geom::LinearTransform const& transformation,
-        double const radius
-        );
-
-    afw::geom::Point2D const _center;     // Center of aperture
-    afw::geom::ellipses::Axes _axes;      // Ellipse defining aperture shape
-};
-
-
-afw::geom::ellipses::Axes KronAperture::_getKronAxes(
+afw::geom::ellipses::Axes KronAperture::getKronAxes(
     afw::geom::ellipses::Axes const& shape,
     afw::geom::LinearTransform const& transformation,
     double const radius
@@ -275,17 +219,13 @@ afw::geom::ellipses::Axes KronAperture::_getKronAxes(
     return axes.transform(transformation);
 }
 
-
-/*
- * Estimate the object Kron aperture, using the shape from source.getShape() (e.g. SDSS's adaptive moments)
- */
 template<typename ImageT>
-PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measure
-                                          afw::geom::ellipses::Axes axes,  // Axes measured for source
-                                          afw::geom::Point2D const& center, // Centre of source
-                                          KronFluxControl const& ctrl,      // control the algorithm
-                                          float *radiusForRadius            // radius used to estimate radius
-                                         )
+PTR(KronAperture) KronAperture::determineRadius(
+    ImageT const& image,
+    afw::geom::ellipses::Axes axes,
+    afw::geom::Point2D const& center,
+    KronFluxControl const& ctrl
+    )
 {
     //
     // We might smooth the image because this is what SExtractor and Pan-STARRS do.  But I don't see much gain
@@ -299,9 +239,10 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
     afw::math::ConvolutionControl convCtrl(doNormalize, doCopyEdge);
     double radius0 = axes.getDeterminantRadius();
     double radius = std::numeric_limits<double>::quiet_NaN();
+    float radiusForRadius = std::nanf("");
     for (int i = 0; i < ctrl.nIterForRadius; ++i) {
         axes.scale(ctrl.nSigmaForRadius);
-        *radiusForRadius = axes.getDeterminantRadius(); // radius we used to estimate R_K
+        radiusForRadius = axes.getDeterminantRadius(); // radius we used to estimate R_K
         //
         // Build an elliptical Footprint of the proper size
         //
@@ -343,7 +284,7 @@ PTR(KronAperture) KronAperture::determine(ImageT const& image, // Image to measu
         axes.scale(radius/axes.getDeterminantRadius()); // set axes to our current estimate of R_K
     }
 
-    return std::make_shared<KronAperture>(center, axes);
+    return std::make_shared<KronAperture>(center, axes, radiusForRadius);
 }
 
 // Photometer an image with a particular aperture
@@ -388,11 +329,11 @@ double calculatePsfKronRadius(
 }
 
 template<typename ImageT>
-std::pair<double, double> KronAperture::measure(ImageT const& image, // Image of interest
-                                                double const nRadiusForFlux, // Kron radius multiplier
-                                                double const maxSincRadius // largest radius that we use sinc
-                                                                           // apertures to measure
-                                               ) const
+std::pair<double, double> KronAperture::measureFlux(
+    ImageT const& image,
+    double const nRadiusForFlux,
+    double const maxSincRadius
+    ) const
 {
     afw::geom::ellipses::Axes axes(getAxes()); // Copy of ellipse core, so we can scale
     axes.scale(nRadiusForFlux);
@@ -400,6 +341,7 @@ std::pair<double, double> KronAperture::measure(ImageT const& image, // Image of
 
     return photometer(image, ellip, maxSincRadius);
 }
+
 /************************************************************************************************************/
 
 /**
@@ -463,7 +405,7 @@ void KronFluxAlgorithm::_applyAperture(
 
     std::pair<double, double> result;
     try {
-        result = aperture.measure(exposure.getMaskedImage(), _ctrl.nRadiusForFlux, _ctrl.maxSincRadius);
+        result = aperture.measureFlux(exposure.getMaskedImage(), _ctrl.nRadiusForFlux, _ctrl.maxSincRadius);
     } catch (pex::exceptions::LengthError const& e) {
         // We hit the edge of the image; there's no reasonable fallback or recovery
         throw LSST_EXCEPT(
@@ -550,12 +492,11 @@ void KronFluxAlgorithm::measure(
     }
 
     PTR(KronAperture) aperture;
-    float radiusForRadius = std::numeric_limits<double>::quiet_NaN();
     if (_ctrl.fixed) {
         aperture.reset(new KronAperture(source));
     } else {
         try {
-            aperture = KronAperture::determine(mimage, axes, center, _ctrl, &radiusForRadius);
+            aperture = KronAperture::determineRadius(mimage, axes, center, _ctrl);
         } catch (pex::exceptions::OutOfRangeError& e) {
             // We hit the edge of the image: no reasonable fallback or recovery possible
             throw LSST_EXCEPT(
@@ -603,7 +544,7 @@ void KronFluxAlgorithm::measure(
     }
 
     _applyAperture(source, exposure, *aperture);
-    source.set(_radiusForRadiusKey, radiusForRadius);
+    source.set(_radiusForRadiusKey, aperture->getRadiusForRadius());
     source.set(_psfRadiusKey, R_K_psf);
     if (bad) _flagHandler.setValue(source, FAILURE, true);
 }
@@ -646,5 +587,21 @@ PTR(KronAperture) KronFluxAlgorithm::_fallbackRadius(afw::table::SourceRecord& s
     aperture->getAxes().scale(newRadius/aperture->getAxes().getDeterminantRadius());
     return aperture;
 }
+
+
+#define INSTANTIATE(TYPE) \
+template PTR(KronAperture) KronAperture::determineRadius<afw::image::MaskedImage<TYPE> >( \
+    afw::image::MaskedImage<TYPE> const&, \
+    afw::geom::ellipses::Axes, \
+    afw::geom::Point2D const&, \
+    KronFluxControl const& \
+    ); \
+template std::pair<double, double> KronAperture::measureFlux<afw::image::MaskedImage<TYPE> >( \
+    afw::image::MaskedImage<TYPE> const&, \
+    double const, \
+    double const \
+    ) const;
+
+INSTANTIATE(float);
 
 }}}} // namespace lsst::meas::extensions::photometryKron
