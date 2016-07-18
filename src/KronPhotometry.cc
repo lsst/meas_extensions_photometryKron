@@ -407,8 +407,12 @@ std::pair<double, double> KronAperture::measure(ImageT const& image, // Image of
  *
  * @ingroup meas/algorithms
  */
-KronFluxAlgorithm::KronFluxAlgorithm(KronFluxControl const & ctrl, std::string const & name, afw::table::Schema & schema) :
-    _name(name),
+KronFluxAlgorithm::KronFluxAlgorithm(
+    KronFluxControl const & ctrl, 
+    std::string const & name, 
+    afw::table::Schema & schema, 
+    daf::base::PropertySet & metadata
+) : _name(name),
     _ctrl(ctrl),
     _fluxResultKey(
         meas::base::FluxResultKey::addFields(schema, name, "flux from Kron Flux algorithm")
@@ -432,6 +436,7 @@ KronFluxAlgorithm::KronFluxAlgorithm(KronFluxControl const & ctrl, std::string c
         {"flag_bad_shape", "shape for measuring Kron radius is bad; used PSF shape"},
     }};
     _flagHandler = meas::base::FlagHandler::addFields(schema, name, flagDefs.begin(), flagDefs.end());
+    metadata.add(name + "_nRadiusForFlux", ctrl.nRadiusForFlux);
 }
 
 void KronFluxAlgorithm::fail(
