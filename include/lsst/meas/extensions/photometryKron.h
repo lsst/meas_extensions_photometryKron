@@ -97,7 +97,12 @@ public:
     /// The control object contains the configuration parameters for this algorithm.
     typedef KronFluxControl Control;
 
-    KronFluxAlgorithm(Control const & ctrl, std::string const & name, afw::table::Schema & schema);
+    KronFluxAlgorithm(
+        Control const & ctrl, 
+        std::string const & name, 
+        afw::table::Schema & schema, 
+        daf::base::PropertySet & metadata
+    );
 
     virtual void measure(
         afw::table::SourceRecord & measRecord,

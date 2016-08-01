@@ -48,6 +48,7 @@ import lsst.meas.algorithms as measAlg
 import lsst.meas.base as measBase
 # importing this package registers essential code
 import lsst.meas.extensions.photometryKron
+from lsst.daf.base import PropertyList
 
 try:
     type(verbose)
@@ -141,9 +142,11 @@ def makeMeasurementConfig(forced=False, nsigma=6.0, nIterForRadius=1, kfac=2.5):
 def measureFree(exposure, center, msConfig):
     """Unforced measurement"""
     schema = afwTable.SourceTable.makeMinimalSchema()
-    task = measBase.SingleFrameMeasurementTask(schema, config=msConfig)
+    algMeta = PropertyList()
+    task = measBase.SingleFrameMeasurementTask(schema, config=msConfig, algMetadata=algMeta)
     measCat = afwTable.SourceCatalog(schema)
     source = measCat.addNew()
+    source.getTable().setMetadata(algMeta)
     ss = afwDetection.FootprintSet(exposure.getMaskedImage(), afwDetection.Threshold(0.1))
     fp = ss.getFootprints()[0]
     source.setFootprint(fp)
@@ -155,7 +158,9 @@ def measureForced(exposure, source, refWcs, msConfig):
     refCat = afwTable.SourceCatalog(source.table)
     refCat.append(source)
     schema = afwTable.SourceTable.makeMinimalSchema()
-    task = measBase.ForcedMeasurementTask(schema, config=msConfig)
+    algMeta = PropertyList()
+    source.getTable().setMetadata(algMeta)
+    task = measBase.ForcedMeasurementTask(schema, config=msConfig, algMetadata=algMeta)
     measCat = task.generateMeasCat(exposure, refCat, refWcs)
     task.attachTransformedFootprints(measCat, refCat, exposure, refWcs)
     task.run(measCat, exposure, refCat, refWcs)
@@ -229,6 +234,8 @@ class KronPhotometryTestCase(tests.TestCase):
         center = afwGeom.Point2D(xcen, ycen)
         msConfig = makeMeasurementConfig(False, nsigma, nIterForRadius, kfac)
         source = measureFree(objImg, center, msConfig)
+        algMeta = source.getTable().getMetadata()
+        self.assertTrue(algMeta.exists('ext_photometryKron_KronFlux_nRadiusForFlux'))
 
         R_K = source.get("ext_photometryKron_KronFlux_radius")
         flux_K = source.get("ext_photometryKron_KronFlux_flux")
@@ -238,6 +245,8 @@ class KronPhotometryTestCase(tests.TestCase):
             # Forced measurement on the same image should produce exactly the same result
             msConfig = makeMeasurementConfig(True, nsigma, nIterForRadius, kfac)
             forced = measureForced(objImg, source, objImg.getWcs(), msConfig)
+            algMeta = source.getTable().getMetadata()
+            self.assertTrue(algMeta.exists('ext_photometryKron_KronFlux_nRadiusForFlux'))
             for field in (
                 "ext_photometryKron_KronFlux_flux",
                 "ext_photometryKron_KronFlux_fluxSigma",
@@ -284,7 +293,9 @@ class KronPhotometryTestCase(tests.TestCase):
         # Note: this code was converted to the new meas_framework, but is not exercised.
         msConfig = makeMeasurementConfig(False, nsigma, nIterForRadius, kfac)
         center = afwGeom.Point2D(xcen, ycen)
-        source = measureFree(objImg, center, msConfig)
+        source = self.measureFree(objImg, center, msConfig)
+        algMeta = source.getTable().getMetadata()
+        self.assertTrue(algMeta.exists('ext_photometryKron_KronFlux_nRadiusForFlux'))
 
         Mxx = source.getIxx()
         Mxy = source.getIxy()
@@ -518,6 +529,8 @@ class KronPhotometryTestCase(tests.TestCase):
                 original = makeGalaxy(width, height, 1000.0, a, b, theta)
                 msConfig = makeMeasurementConfig(forced=False, kfac=kfac)
                 source = measureFree(original, center, msConfig)
+                algMeta = source.getTable().getMetadata()
+                self.assertTrue(algMeta.exists('ext_photometryKron_KronFlux_nRadiusForFlux'))
                 if source.get("ext_photometryKron_KronFlux_flag"):
                     continue
 
@@ -540,6 +553,8 @@ class KronPhotometryTestCase(tests.TestCase):
                         warped.setPsf(afwDetection.GaussianPsf(11, 11, 0.01))
                     msConfig = makeMeasurementConfig(kfac=kfac, forced=True)
                     forced = measureForced(warped, source, original.getWcs(), msConfig)
+                    algMeta = source.getTable().getMetadata()
+                    self.assertTrue(algMeta.exists('ext_photometryKron_KronFlux_nRadiusForFlux'))
 
                     if display:
                         ds9.mtv(original, frame=1)

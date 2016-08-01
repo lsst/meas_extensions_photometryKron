@@ -29,6 +29,7 @@ import uuid
 
 import lsst.afw.table as afwTable
 import lsst.meas.extensions.photometryKron as photKron
+from lsst.daf.base import PropertyList
 
 def getTableDelimeter(schema):
     """
@@ -54,9 +55,10 @@ class KronFlagHandlerTestCase(unittest.TestCase):
         control = photKron.KronFluxControl()
         name = "kronTest"
         schema = afwTable.SourceTable.makeMinimalSchema()
+        algMeta = PropertyList()
 
         # Add the output fields -- including flags -- to the schema.
-        photKron.KronFluxAlgorithm(control, name, schema)
+        photKron.KronFluxAlgorithm(control, name, schema, algMeta)
 
         # Fetch a list of all flag fields, in the order that they were added
         # to the schema (and hence the order they were added to the FlagHandler)
