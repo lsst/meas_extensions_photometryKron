@@ -9,6 +9,10 @@ config.log
 .sconsign.dblite
 config.log
 .sconf_temp
+doc/*.tag
+doc/html
+doc/xml
+doc/doxygen.conf
 doc/htmlDir
 python/lsst/meas/extensions/photometryKron/kronLib.py
 python/lsst/meas/extensions/photometryKron/kronLib_wrap*

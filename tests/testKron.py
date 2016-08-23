@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 #
 # LSST Data Management System
-# Copyright 2008-2015 LSST Corporation.
+#
+# Copyright 2008-2016  AURA/LSST.
 #
 # This product includes software developed by the
 # LSST Project (http://www.lsst.org/).
@@ -18,24 +19,15 @@
 #
 # You should have received a copy of the LSST License Statement and
 # the GNU General Public License along with this program.  If not,
-# see <http://www.lsstcorp.org/LegalNotices/>.
+# see <https://www.lsstcorp.org/LegalNotices/>.
 #
-"""
-Tests for measuring things
-
-Run with:
-   python Kron.py
-or
-   python
-   >>> import Kron; Kron.run()
-"""
-
 import math
 import unittest
+import sys
 
 import numpy as np
 import itertools
-import lsst.utils.tests as tests
+import lsst.utils.tests
 import lsst.pex.logging as pexLogging
 import lsst.afw.detection as afwDetection
 import lsst.afw.geom as afwGeom
@@ -62,6 +54,7 @@ import lsst.afw.display.ds9 as ds9
 import lsst.afw.display.utils as displayUtils
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
 
 def makeGalaxy(width, height, flux, a, b, theta, dx=0.0, dy=0.0, xy0=None, xcen=None, ycen=None):
     """Make a fake galaxy image"""
@@ -90,7 +83,7 @@ def makeGalaxy(width, height, flux, a, b, theta, dx=0.0, dy=0.0, xy0=None, xcen=
             val = 0
             for sx in subZ:
                 for sy in subZ:
-                    u =  c*(dx + sx) + s*(dy + sy)
+                    u = c*(dx + sx) + s*(dy + sy)
                     v = -s*(dx + sx) + c*(dy + sy)
                     val += I0*math.exp(-0.5*((u/a)**2 + (v/b)**2))
 
@@ -102,16 +95,17 @@ def makeGalaxy(width, height, flux, a, b, theta, dx=0.0, dy=0.0, xy0=None, xcen=
             Iuu += val*u**2
             Ivv += val*v**2
 
-    Iuu /= I; Ivv /= I
+    Iuu /= I
+    Ivv /= I
 
     exp = afwImage.makeExposure(afwImage.makeMaskedImage(gal))
-    exp.getMaskedImage().getVariance().setXY0(exp.getXY0()) # workaround #2577
     exp.getMaskedImage().getVariance().set(1.0)
     exp.setWcs(afwImage.makeWcs(afwCoord.Coord(0.0*afwGeom.degrees, 0.0*afwGeom.degrees),
                                 afwGeom.Point2D(0.0, 0.0), 1.0e-4, 0.0, 0.0, 1.0e-4))
     # add a dummy Psf.  The new SdssCentroid needs one
     exp.setPsf(afwDetection.GaussianPsf(11, 11, 0.01))
     return exp
+
 
 def makeMeasurementConfig(forced=False, nsigma=6.0, nIterForRadius=1, kfac=2.5):
     """Construct a (SingleFrame|Forced)MeasurementConfig with the requested parameters"""
@@ -132,12 +126,13 @@ def makeMeasurementConfig(forced=False, nsigma=6.0, nIterForRadius=1, kfac=2.5):
     msConfig.slots.psfFlux = None
     msConfig.slots.instFlux = None
     msConfig.slots.calibFlux = None
-    #msConfig.algorithms.names.remove("correctfluxes")
+    # msConfig.algorithms.names.remove("correctfluxes")
     msConfig.plugins["ext_photometryKron_KronFlux"].nSigmaForRadius = nsigma
     msConfig.plugins["ext_photometryKron_KronFlux"].nIterForRadius = nIterForRadius
     msConfig.plugins["ext_photometryKron_KronFlux"].nRadiusForFlux = kfac
     msConfig.plugins["ext_photometryKron_KronFlux"].enforceMinimumRadius = False
     return msConfig
+
 
 def measureFree(exposure, center, msConfig):
     """Unforced measurement"""
@@ -153,6 +148,7 @@ def measureFree(exposure, center, msConfig):
     task.run(measCat, exposure)
     return source
 
+
 def measureForced(exposure, source, refWcs, msConfig):
     """Forced measurement"""
     refCat = afwTable.SourceCatalog(source.table)
@@ -166,7 +162,8 @@ def measureForced(exposure, source, refWcs, msConfig):
     task.run(measCat, exposure, refCat, refWcs)
     return measCat[0]
 
-class KronPhotometryTestCase(tests.TestCase):
+
+class KronPhotometryTestCase(lsst.utils.tests.TestCase):
     """A test case for measuring Kron quantities"""
 
     def setUp(self):
@@ -257,7 +254,7 @@ class KronPhotometryTestCase(tests.TestCase):
                     if np.isnan(source.get(field)):
                         self.assertTrue(np.isnan(forced.get(field)))
                     else:
-                        self.assertClose(source.get(field), forced.get(field), rtol=1.0e-6, atol=None)
+                        self.assertFloatsAlmostEqual(source.get(field), forced.get(field), rtol=1.0e-6, atol=None)
                 except AssertionError:
                     print "Failed:", field, source.get(field), forced.get(field)
                     raise
@@ -270,11 +267,12 @@ class KronPhotometryTestCase(tests.TestCase):
             shape = source.getShape()
             if True:                    # nsigma*shape, the radius used to estimate R_K
                 shape = shape.clone()
-                shape.scale(source.get("ext_photometryKron_KronFlux_radiusForRadius")/shape.getDeterminantRadius())
+                shape.scale(source.get("ext_photometryKron_KronFlux_radiusForRadius") /
+                            shape.getDeterminantRadius())
                 ds9.dot(shape, xc, yc, ctype=ds9.MAGENTA, frame=ds9Frame)
             # Show R_K
             shape = shape.clone()
-            for r, ct in [(R_K, ds9.BLUE), (R_K*kfac, ds9.CYAN),]:
+            for r, ct in [(R_K, ds9.BLUE), (R_K*kfac, ds9.CYAN), ]:
                 shape.scale(r/shape.getDeterminantRadius())
                 ds9.dot(shape, xc, yc, ctype=ct, frame=ds9Frame)
 
@@ -319,8 +317,8 @@ class KronPhotometryTestCase(tests.TestCase):
         fpEllipse = afwDetection.Footprint(ellipse)
 
         sumI = 0.0
-        sumR = 0.38259771140356325/ab*(1 + math.sqrt(2)*math.hypot(math.fmod(xcen, 1), math.fmod(ycen, 1)))*\
-               objImg.getMaskedImage().getImage().get(int(xcen), int(ycen))
+        sumR = 0.38259771140356325/ab*(1 + math.sqrt(2)*math.hypot(math.fmod(xcen, 1), math.fmod(ycen, 1))) *\
+            objImg.getMaskedImage().getImage().get(int(xcen), int(ycen))
 
         gal = objImg.getMaskedImage().getImage()
 
@@ -330,7 +328,7 @@ class KronPhotometryTestCase(tests.TestCase):
 
             for x in range(x0, x1 + 1):
                 dx, dy = x - xcen, y - ycen
-                u =  c*dx + s*dy
+                u = c*dx + s*dy
                 v = -s*dx + c*dy
 
                 r = math.hypot(u, v*ab)
@@ -348,7 +346,7 @@ class KronPhotometryTestCase(tests.TestCase):
         for y in range(self.height):
             for x in range(self.width):
                 dx, dy = x - xcen, y - ycen
-                u =  c*dx + s*dy
+                u = c*dx + s*dy
                 v = -s*dx + c*dy
                 if math.hypot(u/a, v/b) < kfac:
                     sumI += gal.get(x, y)
@@ -425,9 +423,9 @@ class KronPhotometryTestCase(tests.TestCase):
                                     continue
 
                                 self.assertFalse(failR, (("%s  R_Kron: %g v. exact value %g " +
-                                                          "(error %.3f pixels; limit %.3f)") % \
-                                                             (ID, R_K, R_truth, (R_K - R_truth),
-                                                              1e-2*self.getTolRad(a, b))))
+                                                          "(error %.3f pixels; limit %.3f)") %
+                                                         (ID, R_K, R_truth, (R_K - R_truth),
+                                                          1e-2*self.getTolRad(a, b))))
 
                                 self.assertFalse(failFlux,
                                                  (("%s  flux_Kron: %g v. exact value %g " +
@@ -534,7 +532,7 @@ class KronPhotometryTestCase(tests.TestCase):
                 if source.get("ext_photometryKron_KronFlux_flag"):
                     continue
 
-                angleList = [45, 90,]
+                angleList = [45, 90, ]
                 scaleList = [1.0, 0.5]
                 offsetList = [(1.23, 4.56), (12.3, 45.6)]
 
@@ -561,62 +559,59 @@ class KronPhotometryTestCase(tests.TestCase):
                         shape = source.getShape().clone()
                         xc, yc = source.getCentroid()
                         radius = source.get("ext_photometryKron_KronFlux_radius")
-                        for r, ct in [(radius, ds9.BLUE), (radius*kfac, ds9.CYAN),]:
+                        for r, ct in [(radius, ds9.BLUE), (radius*kfac, ds9.CYAN), ]:
                             shape.scale(r/shape.getDeterminantRadius())
                             ds9.dot(shape, xc, yc, ctype=ct, frame=1)
                         ds9.mtv(warped, frame=2)
-                        transform = (wcs.linearizeSkyToPixel(source.getCoord())*
+                        transform = (wcs.linearizeSkyToPixel(source.getCoord()) *
                                      original.getWcs().linearizePixelToSky(source.getCoord()))
                         shape = shape.transform(transform.getLinear())
                         radius = source.get("ext_photometryKron_KronFlux_radius")
                         xc, yc = wcs.skyToPixel(source.getCoord()) - afwGeom.Extent2D(warped.getXY0())
-                        for r, ct in [(radius, ds9.BLUE), (radius*kfac, ds9.CYAN),]:
+                        for r, ct in [(radius, ds9.BLUE), (radius*kfac, ds9.CYAN), ]:
                             shape.scale(r/shape.getDeterminantRadius())
                             ds9.dot(shape, xc, yc, ctype=ct, frame=2)
                     try:
-                        self.assertClose(source.get("ext_photometryKron_KronFlux_flux"),
-                                            forced.get("ext_photometryKron_KronFlux_flux"),
-                                            rtol=1.0e-3
-                                        )
-                        self.assertClose(source.get("ext_photometryKron_KronFlux_radius"),
-                                            scale*forced.get("ext_photometryKron_KronFlux_radius"),
-                                            rtol=1.0e-3
-                                        )
+                        self.assertFloatsAlmostEqual(source.get("ext_photometryKron_KronFlux_flux"),
+                                         forced.get("ext_photometryKron_KronFlux_flux"),
+                                         rtol=1.0e-3
+                                         )
+                        self.assertFloatsAlmostEqual(source.get("ext_photometryKron_KronFlux_radius"),
+                                         scale*forced.get("ext_photometryKron_KronFlux_radius"),
+                                         rtol=1.0e-3
+                                         )
                         self.assertEqual(source.get("ext_photometryKron_KronFlux_flag"),
-                                        forced.get("ext_photometryKron_KronFlux_flag")
-                                        )
+                                         forced.get("ext_photometryKron_KronFlux_flag")
+                                         )
                     except:
                         print ("Failed:", angle, scale, offset,
                                [(source.get(f), forced.get(f)) for f in
                                    ("ext_photometryKron_KronFlux_flux",
-                                        "ext_photometryKron_KronFlux_radius",
+                                    "ext_photometryKron_KronFlux_radius",
                                        "ext_photometryKron_KronFlux_flag"
-                                   )
-                               ])
+                                    )
+                                ])
                         raise
 
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
-def suite():
-    """Returns a suite containing all the test cases in this module."""
-    tests.init()
+class TestMemory(lsst.utils.tests.MemoryTestCase):
+    pass
 
-    suites = []
-    suites += unittest.makeSuite(KronPhotometryTestCase)
-    suites += unittest.makeSuite(tests.MemoryTestCase)
-    return unittest.TestSuite(suites)
 
-def run(exit = False):
-    """Run the tests"""
-    tests.run(suite(), exit)
+def setup_module(module):
+    lsst.utils.tests.init()
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
     parser = ArgumentParser()
     parser.add_argument("--display", default=False, action="store_true", help="Activate display?")
     parser.add_argument("--verbose", type=int, default=0, help="Verbosity level")
+    parser.add_argument('unittest_args', nargs='*')
     args = parser.parse_args()
     display = args.display
     verbose = args.verbose
-    run(True)
+    sys.argv[1:] = args.unittest_args
+    lsst.utils.tests.init()
+    unittest.main()

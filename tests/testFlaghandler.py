@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 #
 # LSST Data Management System
-# Copyright 2008-2016 AURA/LSST.
+#
+# Copyright 2008-2016  AURA/LSST.
 #
 # This product includes software developed by the
 # LSST Project (http://www.lsst.org/).
@@ -18,18 +19,16 @@
 #
 # You should have received a copy of the LSST License Statement and
 # the GNU General Public License along with this program.  If not,
-# see <http://www.lsstcorp.org/LegalNotices/>.
+# see <https://www.lsstcorp.org/LegalNotices/>.
 #
-"""
-Tests for Kron photometry flag handling.
-"""
-
 import unittest
 import uuid
 
+import lsst.utils.tests
 import lsst.afw.table as afwTable
 import lsst.meas.extensions.photometryKron as photKron
 from lsst.daf.base import PropertyList
+
 
 def getTableDelimeter(schema):
     """
@@ -82,5 +81,13 @@ class KronFlagHandlerTestCase(unittest.TestCase):
         # fields in the schema.
         self.assertEqual(photKron.KronFluxAlgorithm.N_FLAGS, len(flagFieldNames))
 
+class TestMemory(lsst.utils.tests.MemoryTestCase):
+    pass
+
+
+def setup_module(module):
+    lsst.utils.tests.init()
+
 if __name__ == "__main__":
+    lsst.utils.tests.init()
     unittest.main()
