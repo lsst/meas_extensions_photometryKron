@@ -81,6 +81,7 @@ class KronFlagHandlerTestCase(unittest.TestCase):
         # fields in the schema.
         self.assertEqual(photKron.KronFluxAlgorithm.N_FLAGS, len(flagFieldNames))
 
+
 class TestMemory(lsst.utils.tests.MemoryTestCase):
     pass
 

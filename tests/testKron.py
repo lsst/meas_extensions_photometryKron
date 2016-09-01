@@ -254,7 +254,8 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                     if np.isnan(source.get(field)):
                         self.assertTrue(np.isnan(forced.get(field)))
                     else:
-                        self.assertFloatsAlmostEqual(source.get(field), forced.get(field), rtol=1.0e-6, atol=None)
+                        self.assertFloatsAlmostEqual(source.get(
+                            field), forced.get(field), rtol=1.0e-6, atol=None)
                 except AssertionError:
                     print "Failed:", field, source.get(field), forced.get(field)
                     raise
@@ -573,24 +574,24 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                             ds9.dot(shape, xc, yc, ctype=ct, frame=2)
                     try:
                         self.assertFloatsAlmostEqual(source.get("ext_photometryKron_KronFlux_flux"),
-                                         forced.get("ext_photometryKron_KronFlux_flux"),
-                                         rtol=1.0e-3
-                                         )
+                                                     forced.get("ext_photometryKron_KronFlux_flux"),
+                                                     rtol=1.0e-3
+                                                     )
                         self.assertFloatsAlmostEqual(source.get("ext_photometryKron_KronFlux_radius"),
-                                         scale*forced.get("ext_photometryKron_KronFlux_radius"),
-                                         rtol=1.0e-3
-                                         )
+                                                     scale*forced.get("ext_photometryKron_KronFlux_radius"),
+                                                     rtol=1.0e-3
+                                                     )
                         self.assertEqual(source.get("ext_photometryKron_KronFlux_flag"),
                                          forced.get("ext_photometryKron_KronFlux_flag")
                                          )
                     except:
-                        print ("Failed:", angle, scale, offset,
-                               [(source.get(f), forced.get(f)) for f in
-                                   ("ext_photometryKron_KronFlux_flux",
-                                    "ext_photometryKron_KronFlux_radius",
-                                       "ext_photometryKron_KronFlux_flag"
-                                    )
-                                ])
+                        print("Failed:", angle, scale, offset,
+                              [(source.get(f), forced.get(f)) for f in
+                               ("ext_photometryKron_KronFlux_flux",
+                                "ext_photometryKron_KronFlux_radius",
+                                "ext_photometryKron_KronFlux_flag"
+                                )
+                               ])
                         raise
 
 
