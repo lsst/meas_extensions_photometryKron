@@ -1,3 +1,4 @@
+from builtins import str
 #!/usr/bin/env python
 #
 # LSST Data Management System
@@ -80,6 +81,7 @@ class KronFlagHandlerTestCase(unittest.TestCase):
         # Check that the number of enumerated flags matches the number of flag
         # fields in the schema.
         self.assertEqual(photKron.KronFluxAlgorithm.N_FLAGS, len(flagFieldNames))
+
 
 class TestMemory(lsst.utils.tests.MemoryTestCase):
     pass

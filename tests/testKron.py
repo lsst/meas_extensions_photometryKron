@@ -21,6 +21,8 @@
 # the GNU General Public License along with this program.  If not,
 # see <https://www.lsstcorp.org/LegalNotices/>.
 #
+from __future__ import print_function
+from builtins import range
 import math
 import unittest
 import sys
@@ -254,9 +256,10 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                     if np.isnan(source.get(field)):
                         self.assertTrue(np.isnan(forced.get(field)))
                     else:
-                        self.assertFloatsAlmostEqual(source.get(field), forced.get(field), rtol=1.0e-6, atol=None)
+                        self.assertFloatsAlmostEqual(source.get(
+                            field), forced.get(field), rtol=1.0e-6, atol=None)
                 except AssertionError:
-                    print "Failed:", field, source.get(field), forced.get(field)
+                    print("Failed:", field, source.get(field), forced.get(field))
                     raise
 
         if display:
@@ -411,13 +414,13 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                                 ID = "a,b,theta %4.1f %4.1f %4.1f  dx,dy = %.1f,%.1f  kfac=%g" % \
                                     (a, b, theta, dx, dy, kfac)
                                 if ((failR or failFlux) and verbose) or verbose > 1:
-                                    print "%s R_K    %10.3f %10.3f %6.3f pixels (tol %5.3f)%s" % \
+                                    print("%s R_K    %10.3f %10.3f %6.3f pixels (tol %5.3f)%s" % \
                                         (ID, R_K, R_truth, (R_K - R_truth), 1e-2*self.getTolRad(a, b),
-                                         " *" if failR else "")
-                                    print "%s flux_K %10.3f %10.3f %6.2f%%       (tol %5.3f) %s" % \
+                                         " *" if failR else ""))
+                                    print("%s flux_K %10.3f %10.3f %6.2f%%       (tol %5.3f) %s" % \
                                         (ID, flux_K, flux_truth,
                                          100*(flux_K/flux_truth - 1), self.getTolFlux(a, b, kfac),
-                                         " *" if failFlux else "")
+                                         " *" if failFlux else ""))
 
                                 if ignoreTestFailures:
                                     continue
@@ -573,24 +576,24 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                             ds9.dot(shape, xc, yc, ctype=ct, frame=2)
                     try:
                         self.assertFloatsAlmostEqual(source.get("ext_photometryKron_KronFlux_flux"),
-                                         forced.get("ext_photometryKron_KronFlux_flux"),
-                                         rtol=1.0e-3
-                                         )
+                                                     forced.get("ext_photometryKron_KronFlux_flux"),
+                                                     rtol=1.0e-3
+                                                     )
                         self.assertFloatsAlmostEqual(source.get("ext_photometryKron_KronFlux_radius"),
-                                         scale*forced.get("ext_photometryKron_KronFlux_radius"),
-                                         rtol=1.0e-3
-                                         )
+                                                     scale*forced.get("ext_photometryKron_KronFlux_radius"),
+                                                     rtol=1.0e-3
+                                                     )
                         self.assertEqual(source.get("ext_photometryKron_KronFlux_flag"),
                                          forced.get("ext_photometryKron_KronFlux_flag")
                                          )
                     except:
-                        print ("Failed:", angle, scale, offset,
-                               [(source.get(f), forced.get(f)) for f in
-                                   ("ext_photometryKron_KronFlux_flux",
-                                    "ext_photometryKron_KronFlux_radius",
-                                       "ext_photometryKron_KronFlux_flag"
-                                    )
-                                ])
+                        print(("Failed:", angle, scale, offset,
+                              [(source.get(f), forced.get(f)) for f in
+                               ("ext_photometryKron_KronFlux_flux",
+                                "ext_photometryKron_KronFlux_radius",
+                                "ext_photometryKron_KronFlux_flag"
+                                )
+                               ]))
                         raise
 
 
