@@ -25,6 +25,12 @@ from lsst.meas.base import BasePlugin, wrapSimpleAlgorithm
 from .kronLib import *
 from .version import *
 
-wrapSimpleAlgorithm(KronFluxAlgorithm, name="ext_photometryKron_KronFlux", Control=KronFluxControl,
-                    executionOrder=BasePlugin.FLUX_ORDER, shouldApCorr=True, needsMetadata=True)
+KronFluxPlugin, KronFluxForcedPlugin = wrapSimpleAlgorithm(
+    KronFluxAlgorithm,
+    name="ext_photometryKron_KronFlux",
+    Control=KronFluxControl,
+    executionOrder=BasePlugin.FLUX_ORDER,
+    shouldApCorr=True,
+    needsMetadata=True
+    )
 del lsst # cleanup namespace
