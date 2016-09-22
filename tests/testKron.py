@@ -30,7 +30,6 @@ import sys
 import numpy as np
 import itertools
 import lsst.utils.tests
-import lsst.pex.logging as pexLogging
 import lsst.afw.detection as afwDetection
 import lsst.afw.geom as afwGeom
 import lsst.afw.geom.ellipses as afwEllipses
@@ -47,10 +46,8 @@ from lsst.daf.base import PropertyList
 try:
     type(verbose)
 except NameError:
-    verbose = 1
     display = False
     ds9Frame = 0
-pexLogging.Trace_setVerbosity("meas.photometry.kron", verbose)
 
 import lsst.afw.display.ds9 as ds9
 import lsst.afw.display.utils as displayUtils
