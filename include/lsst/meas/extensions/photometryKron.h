@@ -62,6 +62,8 @@ public:
                        "Use the Footprint size as part of initial estimate of Kron radius");
     LSST_CONTROL_FIELD(smoothingSigma, double,
                        "Smooth image with N(0, smoothingSigma^2) Gaussian while estimating R_K");
+    LSST_CONTROL_FIELD(refRadiusName, std::string,
+                       "Name of field specifying reference Kron radius for forced measurement");
 
     KronFluxControl() :
         fixed(false),
@@ -72,7 +74,8 @@ public:
         minimumRadius(0.0),
         enforceMinimumRadius(true),
         useFootprintRadius(false),
-        smoothingSigma(-1.0)
+        smoothingSigma(-1.0),
+        refRadiusName("ext_photometryKron_KronFlux_radius")
     {}
 };
 

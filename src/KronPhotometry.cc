@@ -433,7 +433,7 @@ void KronFluxAlgorithm::_applyForced(
         afw::geom::AffineTransform const & refToMeas
     ) const
 {
-    float const radius = reference.get(reference.getSchema().find<float>(_name + "_radius").key);
+    float const radius = reference.get(reference.getSchema().find<float>(_ctrl.refRadiusName).key);
     KronAperture const aperture(reference, refToMeas, radius);
     _applyAperture(source, exposure, aperture);
     if (exposure.getPsf()) {
