@@ -32,7 +32,6 @@ Interface to Kron magnitudes
 
 %{
 #include "lsst/base.h"
-#include "lsst/pex/logging.h"
 #include "lsst/afw/detection/Footprint.h"
 #include "lsst/afw/image/Utils.h"
 #include "lsst/afw/geom/Point.h"
