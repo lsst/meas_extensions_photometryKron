@@ -79,7 +79,7 @@ class KronFlagHandlerTestCase(unittest.TestCase):
 
         # Check that the number of enumerated flags matches the number of flag
         # fields in the schema.
-        self.assertEqual(photKron.KronFluxAlgorithm.getFlagDefinitions().size(), len(flagFieldNames))
+        self.assertEqual(len(photKron.KronFluxAlgorithm.getFlagDefinitions()), len(flagFieldNames))
 
 
 class TestMemory(lsst.utils.tests.MemoryTestCase):

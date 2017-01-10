@@ -1,3 +1,4 @@
+_build.*
 *.dylib
 *.o
 *.os
@@ -14,8 +15,6 @@ doc/html
 doc/xml
 doc/doxygen.conf
 doc/htmlDir
-python/lsst/meas/extensions/photometryKron/kronLib.py
-python/lsst/meas/extensions/photometryKron/kronLib_wrap*
 tests/.tests
 ups/*.cfgc
 python/lsst/meas/extensions/photometryKron/version.py
