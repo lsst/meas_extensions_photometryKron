@@ -36,7 +36,7 @@
 
 namespace lsst { namespace meas { namespace extensions { namespace photometryKron {
 
-struct KronAperture;
+class KronAperture;
 
 /**
  *  @brief C++ control object for Kron flux.
