@@ -48,6 +48,25 @@ namespace meas {
 namespace extensions {
 namespace photometryKron {
 
+namespace {
+base::FlagDefinitionList flagDefinitions;
+} // end anonymous
+
+base::FlagDefinition const KronFluxAlgorithm::FAILURE = flagDefinitions.addFailureFlag( "general failure flag, set if anything went wrong");
+base::FlagDefinition const KronFluxAlgorithm::EDGE = flagDefinitions.add("flag_edge", "bad measurement due to image edge");
+base::FlagDefinition const KronFluxAlgorithm::BAD_SHAPE_NO_PSF = flagDefinitions.add("flag_bad_shape_no_psf", "bad shape and no PSF");
+base::FlagDefinition const KronFluxAlgorithm::NO_MINIMUM_RADIUS = flagDefinitions.add("flag_no_minimum_radius", "minimum radius could not enforced: no minimum value or PSF");
+base::FlagDefinition const KronFluxAlgorithm::NO_FALLBACK_RADIUS = flagDefinitions.add("flag_no_fallback_radius", "no minimum radius and no PSF provided");
+base::FlagDefinition const KronFluxAlgorithm::BAD_RADIUS = flagDefinitions.add("flag_bad_radius", "bad Kron radius");
+base::FlagDefinition const KronFluxAlgorithm::USED_MINIMUM_RADIUS = flagDefinitions.add("flag_used_minimum_radius", "used the minimum radius for the Kron aperture");
+base::FlagDefinition const KronFluxAlgorithm::USED_PSF_RADIUS = flagDefinitions.add("flag_used_psf_radius", "used the PSF Kron radius for the Kron aperture");
+base::FlagDefinition const KronFluxAlgorithm::SMALL_RADIUS = flagDefinitions.add("flag_small_radius", "measured Kron radius was smaller than that of the PSF");
+base::FlagDefinition const KronFluxAlgorithm::BAD_SHAPE = flagDefinitions.add("flag_bad_shape", "shape for measuring Kron radius is bad; used PSF shape");
+
+base::FlagDefinitionList const & KronFluxAlgorithm::getFlagDefinitions() {
+    return flagDefinitions;
+}
+
 LSST_EXCEPTION_TYPE(BadKronException, pex::exceptions::RuntimeError,
                     lsst::meas::extensions::photometryKron::BadKronException);
 
@@ -365,19 +384,7 @@ KronFluxAlgorithm::KronFluxAlgorithm(
     _psfRadiusKey(schema.addField<float>(name + "_psf_radius", "Radius of PSF")),
     _centroidExtractor(schema, name, true)
 {
-    static boost::array<meas::base::FlagDefinition,N_FLAGS> const flagDefs = {{
-        {"flag", "general failure flag, set if anything went wrong"},
-        {"flag_edge", "bad measurement due to image edge"},
-        {"flag_bad_shape_no_psf", "bad shape and no PSF"},
-        {"flag_no_minimum_radius", "minimum radius could not enforced: no minimum value or PSF"},
-        {"flag_no_fallback_radius", "no minimum radius and no PSF provided"},
-        {"flag_bad_radius", "bad Kron radius"},
-        {"flag_used_minimum_radius", "used the minimum radius for the Kron aperture"},
-        {"flag_used_psf_radius", "used the PSF Kron radius for the Kron aperture"},
-        {"flag_small_radius", "measured Kron radius was smaller than that of the PSF"},
-        {"flag_bad_shape", "shape for measuring Kron radius is bad; used PSF shape"},
-    }};
-    _flagHandler = meas::base::FlagHandler::addFields(schema, name, flagDefs.begin(), flagDefs.end());
+    _flagHandler = meas::base::FlagHandler::addFields(schema, name, getFlagDefinitions());
     metadata.add(name + "_nRadiusForFlux", ctrl.nRadiusForFlux);
 }
 
@@ -398,8 +405,8 @@ void KronFluxAlgorithm::_applyAperture(
     if (rad < std::numeric_limits<double>::epsilon()) {
         throw LSST_EXCEPT(
             meas::base::MeasurementError,
-            _flagHandler.getDefinition(BAD_RADIUS).doc,
-            BAD_RADIUS
+            BAD_RADIUS.doc,
+            BAD_RADIUS.number
         );
     }
 
@@ -410,8 +417,8 @@ void KronFluxAlgorithm::_applyAperture(
         // We hit the edge of the image; there's no reasonable fallback or recovery
         throw LSST_EXCEPT(
             meas::base::MeasurementError,
-            _flagHandler.getDefinition(EDGE).doc,
-            EDGE
+            EDGE.doc,
+            EDGE.number
         );
     }
     // set the results in the source object
@@ -469,12 +476,12 @@ void KronFluxAlgorithm::measure(
         if (!exposure.getPsf()) {
             throw LSST_EXCEPT(
                 meas::base::MeasurementError,
-                _flagHandler.getDefinition(BAD_SHAPE_NO_PSF).doc,
-                BAD_SHAPE_NO_PSF
+                BAD_SHAPE_NO_PSF.doc,
+                BAD_SHAPE_NO_PSF.number
             );
         }
         axes = exposure.getPsf()->computeShape();
-        _flagHandler.setValue(source, BAD_SHAPE, true);
+        _flagHandler.setValue(source, BAD_SHAPE.number, true);
     }
     if (_ctrl.useFootprintRadius) {
         afw::geom::ellipses::Axes footprintAxes(source.getFootprint()->getShape());
@@ -501,8 +508,8 @@ void KronFluxAlgorithm::measure(
             // We hit the edge of the image: no reasonable fallback or recovery possible
             throw LSST_EXCEPT(
                 meas::base::MeasurementError,
-                _flagHandler.getDefinition(EDGE).doc,
-                EDGE
+                EDGE.doc,
+                EDGE.number
             );
         } catch (BadKronException& e) {
             // Not setting bad=true because we only failed due to low S/N
@@ -525,28 +532,28 @@ void KronFluxAlgorithm::measure(
         if (_ctrl.minimumRadius > 0.0) {
             if (rad < _ctrl.minimumRadius) {
                 newRadius = _ctrl.minimumRadius;
-                _flagHandler.setValue(source, USED_MINIMUM_RADIUS, true);
+                _flagHandler.setValue(source, USED_MINIMUM_RADIUS.number, true);
             }
         } else if (!exposure.getPsf()) {
             throw LSST_EXCEPT(
                 meas::base::MeasurementError,
-                _flagHandler.getDefinition(NO_MINIMUM_RADIUS).doc,
-                NO_MINIMUM_RADIUS
+                NO_MINIMUM_RADIUS.doc,
+                NO_MINIMUM_RADIUS.number
             );
         } else if (rad < R_K_psf) {
             newRadius = R_K_psf;
-            _flagHandler.setValue(source, USED_PSF_RADIUS, true);
+            _flagHandler.setValue(source, USED_PSF_RADIUS.number, true);
         }
         if (newRadius != rad) {
             aperture->getAxes().scale(newRadius/rad);
-            _flagHandler.setValue(source, SMALL_RADIUS, true); // guilty after all
+            _flagHandler.setValue(source, SMALL_RADIUS.number, true); // guilty after all
         }
     }
 
     _applyAperture(source, exposure, *aperture);
     source.set(_radiusForRadiusKey, aperture->getRadiusForRadius());
     source.set(_psfRadiusKey, R_K_psf);
-    if (bad) _flagHandler.setValue(source, FAILURE, true);
+    if (bad) _flagHandler.setValue(source, FAILURE.number, true);
 }
 
 void KronFluxAlgorithm::measureForced(
@@ -568,19 +575,19 @@ void KronFluxAlgorithm::measureForced(
 PTR(KronAperture) KronFluxAlgorithm::_fallbackRadius(afw::table::SourceRecord& source, double const R_K_psf,
                                             pex::exceptions::Exception& exc) const
 {
-    _flagHandler.setValue(source, BAD_RADIUS, true);
+    _flagHandler.setValue(source, BAD_RADIUS.number, true);
     double newRadius;
     if (_ctrl.minimumRadius > 0) {
         newRadius = _ctrl.minimumRadius;
-        _flagHandler.setValue(source, USED_MINIMUM_RADIUS, true);
+        _flagHandler.setValue(source, USED_MINIMUM_RADIUS.number, true);
     } else if (R_K_psf > 0) {
         newRadius = R_K_psf;
-        _flagHandler.setValue(source, USED_PSF_RADIUS, true);
+        _flagHandler.setValue(source, USED_PSF_RADIUS.number, true);
     } else {
         throw LSST_EXCEPT(
             meas::base::MeasurementError,
-            _flagHandler.getDefinition(NO_FALLBACK_RADIUS).doc,
-            NO_FALLBACK_RADIUS
+            NO_FALLBACK_RADIUS.doc,
+            NO_FALLBACK_RADIUS.number
         );
     }
     PTR(KronAperture) aperture(new KronAperture(source));
