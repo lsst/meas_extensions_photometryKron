@@ -60,7 +60,7 @@ void declareKronFluxControl(py::module &mod) {
 }
 
 void declareKronFluxAlgorithm(py::module &mod) {
-    py::class_<KronFluxAlgorithm, base::SimpleAlgorithm> cls(mod, "KronFluxAlgorithm");
+    py::class_<KronFluxAlgorithm, std::shared_ptr<KronFluxAlgorithm>, base::SimpleAlgorithm> cls(mod, "KronFluxAlgorithm");
 
     cls.attr("FAILURE") = py::cast(static_cast<int>(KronFluxAlgorithm::FAILURE));
     cls.attr("EDGE") = py::cast(static_cast<int>(KronFluxAlgorithm::EDGE));
