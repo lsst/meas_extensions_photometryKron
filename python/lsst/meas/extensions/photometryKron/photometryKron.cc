@@ -23,7 +23,7 @@
 
 #include <pybind11/pybind11.h>
 
-#include "lsst/pex/config/pybind11.h" // defines LSST_DECLARE_CONTROL_FIELD
+#include "lsst/pex/config/python.h" // defines LSST_DECLARE_CONTROL_FIELD
 #include "lsst/afw/geom/Point.h"
 #include "lsst/afw/geom/ellipses.h"
 #include "lsst/afw/geom/AffineTransform.h"
