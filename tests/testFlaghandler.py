@@ -63,24 +63,23 @@ class KronFlagHandlerTestCase(unittest.TestCase):
         # Fetch a list of all flag fields, in the order that they were added
         # to the schema (and hence the order they were added to the FlagHandler)
         flagFieldNames = schema.extract("%s_flag*" % (name,), ordered=True).keys()
-
         # Iterate over each flag field, checking that they were enumerated in
         # the algorithm in the same order as in the FlagHandler.
         for i, flagFieldName in enumerate(flagFieldNames):
             if flagFieldName == "%s_flag" % (name,):
                 # The generic "failure" flag is written into the schema as $name_flag.
-                self.assertEqual(i, photKron.KronFluxAlgorithm.FAILURE)
+                self.assertEqual(i, photKron.KronFluxAlgorithm.FAILURE.number)
             else:
                 # Other flags are referenced by name. We assert that the
                 # enumeration name (e.g. BAD_RADIUS) is an upper-case version
                 # of the schema field name (e.g. flag_bad_radius), with the
                 # "flag_" prefix stripped.
                 flagName = flagFieldName.split(getTableDelimeter(schema), 2)[-1]
-                self.assertEqual(i, getattr(photKron.KronFluxAlgorithm, flagName.upper()))
+                self.assertEqual(i, getattr(photKron.KronFluxAlgorithm, flagName.upper()).number)
 
         # Check that the number of enumerated flags matches the number of flag
         # fields in the schema.
-        self.assertEqual(photKron.KronFluxAlgorithm.N_FLAGS, len(flagFieldNames))
+        self.assertEqual(photKron.KronFluxAlgorithm.getFlagDefinitions().size(), len(flagFieldNames))
 
 
 class TestMemory(lsst.utils.tests.MemoryTestCase):

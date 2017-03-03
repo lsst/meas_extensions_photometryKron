@@ -85,19 +85,18 @@ public:
 class KronFluxAlgorithm : public base::SimpleAlgorithm {
 public:
 
-    enum {
-        FAILURE=base::FlagHandler::FAILURE,
-        EDGE,
-        BAD_SHAPE_NO_PSF,
-        NO_MINIMUM_RADIUS,
-        NO_FALLBACK_RADIUS,
-        BAD_RADIUS,
-        USED_MINIMUM_RADIUS,
-        USED_PSF_RADIUS,
-        SMALL_RADIUS,
-        BAD_SHAPE,
-        N_FLAGS
-    };
+    // Structures and routines to manage flaghandler
+    static meas::base::FlagDefinitionList const & getFlagDefinitions();
+    static meas::base::FlagDefinition const FAILURE;
+    static meas::base::FlagDefinition const EDGE;
+    static meas::base::FlagDefinition const BAD_SHAPE_NO_PSF;
+    static meas::base::FlagDefinition const NO_MINIMUM_RADIUS;
+    static meas::base::FlagDefinition const NO_FALLBACK_RADIUS;
+    static meas::base::FlagDefinition const BAD_RADIUS;
+    static meas::base::FlagDefinition const USED_MINIMUM_RADIUS;
+    static meas::base::FlagDefinition const USED_PSF_RADIUS;
+    static meas::base::FlagDefinition const SMALL_RADIUS;
+    static meas::base::FlagDefinition const BAD_SHAPE;
 
     /// A typedef to the Control object for this algorithm, defined above.
     /// The control object contains the configuration parameters for this algorithm.
