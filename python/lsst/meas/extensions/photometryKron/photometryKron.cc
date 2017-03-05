@@ -19,9 +19,11 @@
  * the GNU General Public License along with this program.  If not,
  * see <https://www.lsstcorp.org/LegalNotices/>.
  */
-#include <cstdint>
 
-#include <pybind11/pybind11.h>
+#include "pybind11/pybind11.h"
+#include "pybind11/stl.h"
+
+#include <cstdint>
 
 #include "lsst/pex/config/python.h"  // defines LSST_DECLARE_CONTROL_FIELD
 #include "lsst/afw/geom/Point.h"
@@ -63,17 +65,18 @@ void declareKronFluxAlgorithm(py::module &mod) {
     py::class_<KronFluxAlgorithm, std::shared_ptr<KronFluxAlgorithm>, base::SimpleAlgorithm> cls(
             mod, "KronFluxAlgorithm");
 
-    cls.attr("FAILURE") = py::cast(static_cast<int>(KronFluxAlgorithm::FAILURE));
-    cls.attr("EDGE") = py::cast(static_cast<int>(KronFluxAlgorithm::EDGE));
-    cls.attr("BAD_SHAPE_NO_PSF") = py::cast(static_cast<int>(KronFluxAlgorithm::BAD_SHAPE_NO_PSF));
-    cls.attr("NO_MINIMUM_RADIUS") = py::cast(static_cast<int>(KronFluxAlgorithm::NO_MINIMUM_RADIUS));
-    cls.attr("NO_FALLBACK_RADIUS") = py::cast(static_cast<int>(KronFluxAlgorithm::NO_FALLBACK_RADIUS));
-    cls.attr("BAD_RADIUS") = py::cast(static_cast<int>(KronFluxAlgorithm::BAD_RADIUS));
-    cls.attr("USED_MINIMUM_RADIUS") = py::cast(static_cast<int>(KronFluxAlgorithm::USED_MINIMUM_RADIUS));
-    cls.attr("USED_PSF_RADIUS") = py::cast(static_cast<int>(KronFluxAlgorithm::USED_PSF_RADIUS));
-    cls.attr("SMALL_RADIUS") = py::cast(static_cast<int>(KronFluxAlgorithm::SMALL_RADIUS));
-    cls.attr("BAD_SHAPE") = py::cast(static_cast<int>(KronFluxAlgorithm::BAD_SHAPE));
-    cls.attr("N_FLAGS") = py::cast(static_cast<int>(KronFluxAlgorithm::N_FLAGS));
+    cls.def_static("getFlagDefinitions", &KronFluxAlgorithm::getFlagDefinitions,
+                   py::return_value_policy::copy);
+    cls.attr("FAILURE") = py::cast(KronFluxAlgorithm::FAILURE);
+    cls.attr("EDGE") = py::cast(KronFluxAlgorithm::EDGE);
+    cls.attr("BAD_SHAPE_NO_PSF") = py::cast(KronFluxAlgorithm::BAD_SHAPE_NO_PSF);
+    cls.attr("NO_MINIMUM_RADIUS") = py::cast(KronFluxAlgorithm::NO_MINIMUM_RADIUS);
+    cls.attr("NO_FALLBACK_RADIUS") = py::cast(KronFluxAlgorithm::NO_FALLBACK_RADIUS);
+    cls.attr("BAD_RADIUS") = py::cast(KronFluxAlgorithm::BAD_RADIUS);
+    cls.attr("USED_MINIMUM_RADIUS") = py::cast(KronFluxAlgorithm::USED_MINIMUM_RADIUS);
+    cls.attr("USED_PSF_RADIUS") = py::cast(KronFluxAlgorithm::USED_PSF_RADIUS);
+    cls.attr("SMALL_RADIUS") = py::cast(KronFluxAlgorithm::SMALL_RADIUS);
+    cls.attr("BAD_SHAPE") = py::cast(KronFluxAlgorithm::BAD_SHAPE);
 
     cls.def(py::init<KronFluxAlgorithm::Control const &, std::string const &, afw::table::Schema &,
                      daf::base::PropertySet &>(),
