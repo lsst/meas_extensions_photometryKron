@@ -20,17 +20,5 @@
 # see <http://www.lsstcorp.org/LegalNotices/>.
 #
 
-from lsst.meas.base import BasePlugin, wrapSimpleAlgorithm
-
 from .kronLib import *
 from .version import *
-
-KronFluxPlugin, KronFluxForcedPlugin = wrapSimpleAlgorithm(
-    KronFluxAlgorithm,
-    name="ext_photometryKron_KronFlux",
-    Control=KronFluxControl,
-    executionOrder=BasePlugin.FLUX_ORDER,
-    shouldApCorr=True,
-    needsMetadata=True
-    )
-del lsst # cleanup namespace
