@@ -127,10 +127,15 @@ void declareKronAperture(py::module &mod) {
     declareKronApertureTemplatedMethods<afw::image::MaskedImage<float>>(cls);
 }
 
-}  // namespace lsst::meas::extensions::<anonymous>
+}  // <anonymous>
 
-PYBIND11_PLUGIN(_photometryKron) {
-    py::module mod("_photometryKron", "Python wrapper for PhotometryKroh.h");
+PYBIND11_PLUGIN(photometryKron) {
+    py::module::import("lsst.afw.geom");
+    py::module::import("lsst.afw.image");
+    py::module::import("lsst.afw.table");
+    py::module::import("lsst.daf.base");
+
+    py::module mod("photometryKron");
 
     declareKronFluxControl(mod);
     declareKronFluxAlgorithm(mod);
@@ -138,7 +143,8 @@ PYBIND11_PLUGIN(_photometryKron) {
 
     return mod.ptr();
 }
-}
-}
-}
-}  // namespace lsst::meas::extensions::photometryKron
+
+}  // photometryKron
+}  // extensions
+}  // meas
+}  // lsst
