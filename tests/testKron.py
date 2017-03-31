@@ -114,6 +114,7 @@ def makeMeasurementConfig(forced=False, nsigma=6.0, nIterForRadius=1, kfac=2.5):
                                      "ext_photometryKron_KronFlux"]
         msConfig.slots.centroid = "base_TransformedCentroid"
         msConfig.slots.shape = "base_TransformedShape"
+        msConfig.copyColumns = {"id": "objectId", "parent": "parentObjectId"}
     else:
         msConfig = measBase.SingleFrameMeasurementConfig()
         msConfig.algorithms.names = ["base_SdssCentroid", "base_SdssShape",
