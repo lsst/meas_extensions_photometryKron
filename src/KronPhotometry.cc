@@ -28,12 +28,12 @@
 #include "lsst/pex/exceptions.h"
 #include "lsst/afw/geom/Point.h"
 #include "lsst/afw/geom/Box.h"
+#include "lsst/afw/geom/SpanSet.h"
 #include "lsst/afw/image/Exposure.h"
 #include "lsst/afw/table/Source.h"
 #include "lsst/afw/math/Integrate.h"
 #include "lsst/afw/math/FunctionLibrary.h"
 #include "lsst/afw/math/KernelFunctions.h"
-#include "lsst/afw/detection/FootprintFunctor.h"
 #include "lsst/afw/detection/Psf.h"
 #include "lsst/afw/coord/Coord.h"
 #include "lsst/afw/geom/AffineTransform.h"
@@ -73,11 +73,9 @@ LSST_EXCEPTION_TYPE(BadKronException, pex::exceptions::RuntimeError,
 namespace {
 
 template <typename MaskedImageT>
-        class FootprintFlux : public afw::detection::FootprintFunctor<MaskedImageT> {
+        class FootprintFlux {
 public:
-    explicit FootprintFlux(MaskedImageT const& mimage ///< The image the source lives in
-                          ) : afw::detection::FootprintFunctor<MaskedImageT>(mimage),
-                     _sum(0.0), _sumVar(0.0) {}
+    explicit FootprintFlux() : _sum(0.0), _sumVar(0.0) {}
 
     /// @brief Reset everything for a new Footprint
     void reset() {
@@ -85,13 +83,10 @@ public:
     }
     void reset(afw::detection::Footprint const&) {}
 
-    /// @brief method called for each pixel by apply()
-    void operator()(typename MaskedImageT::xy_locator loc, ///< locator pointing at the pixel
-                    int,                                   ///< column-position of pixel
-                    int                                    ///< row-position of pixel
-                   ) {
-        typename MaskedImageT::Image::Pixel ival = loc.image(0, 0);
-        typename MaskedImageT::Variance::Pixel vval = loc.variance(0, 0);
+    /// @brief method called for each pixel by applyFunctor
+    void operator()(afw::geom::Point2I const & pos,
+                    typename MaskedImageT::Image::Pixel const & ival,
+                    typename MaskedImageT::Variance::Pixel const & vval) {
         _sum += ival;
         _sumVar += vval;
     }
@@ -119,14 +114,13 @@ private:
 /// the point
 ///
 template <typename MaskedImageT, typename WeightImageT>
-class FootprintFindMoment : public afw::detection::FootprintFunctor<MaskedImageT> {
+class FootprintFindMoment {
 public:
     FootprintFindMoment(MaskedImageT const& mimage, ///< The image the source lives in
                         afw::geom::Point2D const& center, // center of the object
                         double const ab,                // axis ratio
                         double const theta // rotation of ellipse +ve from x axis
-        ) : afw::detection::FootprintFunctor<MaskedImageT>(mimage),
-                           _xcen(center.getX()), _ycen(center.getY()),
+        ) : _xcen(center.getX()), _ycen(center.getY()),
                            _ab(ab),
                            _cosTheta(::cos(theta)),
                            _sinTheta(::sin(theta)),
@@ -160,11 +154,10 @@ public:
         }
     }
 
-    /// @brief method called for each pixel by apply()
-    void operator()(typename MaskedImageT::xy_locator iloc, ///< locator pointing at the image pixel
-                    int x,                                  ///< column-position of pixel
-                    int y                                   ///< row-position of pixel
-                   ) {
+    /// @brief method called for each pixel by applyFunctor
+    void operator()(afw::geom::Point2I const & pos, typename MaskedImageT::Image::Pixel const & ival) {
+        double x = static_cast<double>(pos.getX());
+        double y = static_cast<double>(pos.getY());
         double const dx = x - _xcen;
         double const dy = y - _ycen;
         double const du =  dx*_cosTheta + dy*_sinTheta;
@@ -189,7 +182,6 @@ public:
         }
 #endif
 
-        typename MaskedImageT::Image::Pixel ival = iloc.image(0, 0);
         _sum += ival;
         _sumR += r*ival;
 #if 0
@@ -265,7 +257,8 @@ PTR(KronAperture) KronAperture::determineRadius(
         //
         // Build an elliptical Footprint of the proper size
         //
-        afw::detection::Footprint foot(afw::geom::ellipses::Ellipse(axes, center));
+        afw::detection::Footprint foot(afw::geom::SpanSet::fromShape(
+            afw::geom::ellipses::Ellipse(axes, center)));
         afw::geom::Box2I bbox = !smoothImage ?
             foot.getBBox() :
             kernel.growBBox(foot.getBBox()); // the smallest bbox needed to convolve with Kernel
@@ -282,7 +275,8 @@ PTR(KronAperture) KronAperture::determineRadius(
         );
 
         try {
-            iRFunctor.apply(foot);
+            foot.getSpans()->applyFunctor(
+                iRFunctor, *(subImage.getImage()));
         } catch(lsst::pex::exceptions::OutOfRangeError &e) {
             if (i == 0) {
                 LSST_EXCEPT_ADD(e, "Determining Kron aperture");
@@ -301,6 +295,7 @@ PTR(KronAperture) KronAperture::determineRadius(
         radius0 = radius;
 
         axes.scale(radius/axes.getDeterminantRadius()); // set axes to our current estimate of R_K
+        iRFunctor.reset();
     }
 
     return std::make_shared<KronAperture>(center, axes, radiusForRadius);
@@ -316,10 +311,10 @@ std::pair<double, double> photometer(
 {
     afw::geom::ellipses::Axes const& axes = aperture.getCore();
     if (axes.getB() > maxSincRadius) {
-        FootprintFlux<ImageT> fluxFunctor(image);
-        afw::detection::Footprint const foot(aperture, image.getBBox());
-        fluxFunctor.apply(foot);
-
+        FootprintFlux<ImageT> fluxFunctor;
+        auto spans = afw::geom::SpanSet::fromShape(aperture);
+        spans->applyFunctor(
+                fluxFunctor, *(image.getImage()), *(image.getVariance()));
         return std::make_pair(fluxFunctor.getSum(), ::sqrt(fluxFunctor.getSumVar()));
     }
     try {
@@ -369,9 +364,9 @@ std::pair<double, double> KronAperture::measureFlux(
  * @ingroup meas/algorithms
  */
 KronFluxAlgorithm::KronFluxAlgorithm(
-    KronFluxControl const & ctrl, 
-    std::string const & name, 
-    afw::table::Schema & schema, 
+    KronFluxControl const & ctrl,
+    std::string const & name,
+    afw::table::Schema & schema,
     daf::base::PropertySet & metadata
 ) : _name(name),
     _ctrl(ctrl),
@@ -420,7 +415,14 @@ void KronFluxAlgorithm::_applyAperture(
             EDGE.doc,
             EDGE.number
         );
+    } catch(lsst::pex::exceptions::OutOfRangeError &e) {
+	    throw LSST_EXCEPT(
+                meas::base::MeasurementError,
+                EDGE.doc,
+                EDGE.number
+            );
     }
+
     // set the results in the source object
     meas::base::FluxResult fluxResult;
     fluxResult.flux = result.first;
