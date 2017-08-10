@@ -603,6 +603,10 @@ class TestMemory(lsst.utils.tests.MemoryTestCase):
 
 def setup_module(module):
     lsst.utils.tests.init()
+    # Enable verbose mode for pytest. The verbose content only appears to the
+    # user on error or in the JUnit XML.
+    global verbose
+    verbose = 2
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
