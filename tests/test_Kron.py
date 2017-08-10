@@ -52,8 +52,6 @@ except NameError:
 import lsst.afw.display.ds9 as ds9
 import lsst.afw.display.utils as displayUtils
 
-#-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-
 
 def makeGalaxy(width, height, flux, a, b, theta, dx=0.0, dy=0.0, xy0=None, xcen=None, ycen=None):
     """Make a fake galaxy image"""
@@ -406,19 +404,19 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
 
                                 failR = math.isnan(R_K) or flags_K or \
                                     abs(R_truth - R_K) > 1e-2*self.getTolRad(a, b)
-                                failFlux =  math.isnan(flux_K) or flags_K or \
+                                failFlux = math.isnan(flux_K) or flags_K or \
                                     abs(flux_K/flux_truth - 1) > 1e-2*self.getTolFlux(a, b, kfac)
 
                                 ID = "a,b,theta %4.1f %4.1f %4.1f  dx,dy = %.1f,%.1f  kfac=%g" % \
                                     (a, b, theta, dx, dy, kfac)
                                 if ((failR or failFlux) and verbose) or verbose > 1:
-                                    print("%s R_K    %10.3f %10.3f %6.3f pixels (tol %5.3f)%s" % \
-                                        (ID, R_K, R_truth, (R_K - R_truth), 1e-2*self.getTolRad(a, b),
-                                         " *" if failR else ""))
-                                    print("%s flux_K %10.3f %10.3f %6.2f%%       (tol %5.3f) %s" % \
-                                        (ID, flux_K, flux_truth,
-                                         100*(flux_K/flux_truth - 1), self.getTolFlux(a, b, kfac),
-                                         " *" if failFlux else ""))
+                                    print("%s R_K    %10.3f %10.3f %6.3f pixels (tol %5.3f)%s" %
+                                          (ID, R_K, R_truth, (R_K - R_truth), 1e-2*self.getTolRad(a, b),
+                                           " *" if failR else ""))
+                                    print("%s flux_K %10.3f %10.3f %6.2f%%       (tol %5.3f) %s" %
+                                          (ID, flux_K, flux_truth,
+                                           100*(flux_K/flux_truth - 1), self.getTolFlux(a, b, kfac),
+                                           " *" if failFlux else ""))
 
                                 if ignoreTestFailures:
                                     continue
@@ -548,7 +546,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
 
                     warped = warper.warpExposure(wcs, original)
                     # add a Psf if there is none.  The new SdssCentroid needs a Psf.
-                    if warped.getPsf() == None:
+                    if warped.getPsf() is None:
                         warped.setPsf(afwDetection.GaussianPsf(11, 11, 0.01))
                     msConfig = makeMeasurementConfig(kfac=kfac, forced=True)
                     forced = measureForced(warped, source, original.getWcs(), msConfig)
@@ -595,14 +593,17 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                         raise
 
 
-#-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-
 class TestMemory(lsst.utils.tests.MemoryTestCase):
     pass
 
 
 def setup_module(module):
     lsst.utils.tests.init()
+    # Enable verbose mode for pytest. The verbose content only appears to the
+    # user on error or in the JUnit XML.
+    global verbose
+    verbose = 2
+
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
