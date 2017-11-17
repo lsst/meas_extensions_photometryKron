@@ -562,13 +562,12 @@ void KronFluxAlgorithm::measureForced(
         afw::table::SourceRecord & measRecord,
         afw::image::Exposure<float> const & exposure,
         afw::table::SourceRecord const & refRecord,
-        afw::image::Wcs const & refWcs
+        afw::geom::SkyWcs const & refWcs
     ) const {
     afw::geom::Point2D center = _centroidExtractor(measRecord, _flagHandler);
-    CONST_PTR(afw::image::Wcs) refWcsPtr(refWcs.clone());
-    afw::image::XYTransformFromWcsPair xytransform(exposure.getWcs(), refWcsPtr);
+    auto xytransform = afw::geom::makeWcsPairTransform(refWcs, *exposure.getWcs());
     _applyForced(measRecord, exposure, center, refRecord,
-                    xytransform.linearizeForwardTransform(refRecord.getCentroid())
+                    linearizeTransform(*xytransform, refRecord.getCentroid())
                 );
 
 }

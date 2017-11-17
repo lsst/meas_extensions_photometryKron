@@ -96,8 +96,11 @@ def makeGalaxy(width, height, flux, a, b, theta, dx=0.0, dy=0.0, xy0=None, xcen=
 
     exp = afwImage.makeExposure(afwImage.makeMaskedImage(gal))
     exp.getMaskedImage().getVariance().set(1.0)
-    exp.setWcs(afwImage.makeWcs(afwCoord.Coord(0.0*afwGeom.degrees, 0.0*afwGeom.degrees),
-                                afwGeom.Point2D(0.0, 0.0), 1.0e-4, 0.0, 0.0, 1.0e-4))
+    scale = 1.0e-4 * afwGeom.degrees
+    cdMatrix = afwGeom.makeCdMatrix(scale=scale, flipX=True)
+    exp.setWcs(afwGeom.makeSkyWcs(crpix=afwGeom.Point2D(0.0, 0.0),
+                                  crval=afwCoord.IcrsCoord(0.0*afwGeom.degrees, 0.0*afwGeom.degrees),
+                                  cdMatrix=cdMatrix))
     # add a dummy Psf.  The new SdssCentroid needs one
     exp.setPsf(afwDetection.GaussianPsf(11, 11, 0.01))
     return exp
@@ -530,18 +533,18 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                 if source.get("ext_photometryKron_KronFlux_flag"):
                     continue
 
-                angleList = [45, 90, ]
+                angleList = [val * afwGeom.degrees for val in (45, 90)]
                 scaleList = [1.0, 0.5]
                 offsetList = [(1.23, 4.56), (12.3, 45.6)]
 
                 for angle, scale, offset in itertools.product(angleList, scaleList, offsetList):
-                    cosAngle = math.cos(math.radians(angle))
-                    sinAngle = math.sin(math.radians(angle))
                     dx, dy = offset
-                    pixelScale = original.getWcs().pixelScale().asDegrees()*scale
-                    wcs = afwImage.makeWcs(afwCoord.Coord(0.0*afwGeom.degrees, 0.0*afwGeom.degrees),
-                                           afwGeom.Point2D(dx, dy), pixelScale*cosAngle,
-                                           pixelScale*sinAngle, -pixelScale*sinAngle, pixelScale*cosAngle)
+                    pixelScale = original.getWcs().getPixelScale()*scale
+                    cdMatrix = afwGeom.makeCdMatrix(scale=pixelScale, orientation=angle, flipX=True)
+                    wcs = afwGeom.makeSkyWcs(crpix=afwGeom.Point2D(dx, dy),
+                                             crval=afwCoord.IcrsCoord(0.0*afwGeom.degrees,
+                                                                      0.0*afwGeom.degrees),
+                                             cdMatrix=cdMatrix)
 
                     warped = warper.warpExposure(wcs, original)
                     # add a Psf if there is none.  The new SdssCentroid needs a Psf.
