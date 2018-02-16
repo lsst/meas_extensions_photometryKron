@@ -28,6 +28,7 @@
 
 #include "lsst/pex/config.h"
 #include "lsst/afw/image/Exposure.h"
+#include "lsst/afw/geom/SkyWcs.h"
 #include "lsst/meas/base/Algorithm.h"
 #include "lsst/meas/base/FluxUtilities.h"
 #include "lsst/meas/base/CentroidUtilities.h"
@@ -118,7 +119,7 @@ public:
         afw::table::SourceRecord & measRecord,
         afw::image::Exposure<float> const & exposure,
         afw::table::SourceRecord const & refRecord,
-        afw::image::Wcs const & refWcs
+        afw::geom::SkyWcs const & refWcs
     ) const;
 
     virtual void fail(

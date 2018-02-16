@@ -11,6 +11,7 @@ config.log
 .sconsign.dblite
 config.log
 .sconf_temp
+pytest_session.txt
 doc/*.tag
 doc/html
 doc/xml
