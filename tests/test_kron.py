@@ -32,7 +32,6 @@ import lsst.utils.tests
 import lsst.afw.detection as afwDetection
 import lsst.afw.geom as afwGeom
 import lsst.afw.geom.ellipses as afwEllipses
-import lsst.afw.coord as afwCoord
 import lsst.afw.image as afwImage
 import lsst.afw.math as afwMath
 import lsst.afw.table as afwTable
@@ -99,7 +98,7 @@ def makeGalaxy(width, height, flux, a, b, theta, dx=0.0, dy=0.0, xy0=None, xcen=
     scale = 1.0e-4 * afwGeom.degrees
     cdMatrix = afwGeom.makeCdMatrix(scale=scale, flipX=True)
     exp.setWcs(afwGeom.makeSkyWcs(crpix=afwGeom.Point2D(0.0, 0.0),
-                                  crval=afwCoord.IcrsCoord(0.0*afwGeom.degrees, 0.0*afwGeom.degrees),
+                                  crval=afwGeom.SpherePoint(0.0, 0.0, afwGeom.degrees),
                                   cdMatrix=cdMatrix))
     # add a dummy Psf.  The new SdssCentroid needs one
     exp.setPsf(afwDetection.GaussianPsf(11, 11, 0.01))
@@ -542,8 +541,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                     pixelScale = original.getWcs().getPixelScale()*scale
                     cdMatrix = afwGeom.makeCdMatrix(scale=pixelScale, orientation=angle, flipX=True)
                     wcs = afwGeom.makeSkyWcs(crpix=afwGeom.Point2D(dx, dy),
-                                             crval=afwCoord.IcrsCoord(0.0*afwGeom.degrees,
-                                                                      0.0*afwGeom.degrees),
+                                             crval=afwGeom.SpherePoint(0.0, 0.0, afwGeom.degrees),
                                              cdMatrix=cdMatrix)
 
                     warped = warper.warpExposure(wcs, original)
