@@ -35,7 +35,6 @@
 #include "lsst/afw/math/FunctionLibrary.h"
 #include "lsst/afw/math/KernelFunctions.h"
 #include "lsst/afw/detection/Psf.h"
-#include "lsst/afw/coord/Coord.h"
 #include "lsst/afw/geom/AffineTransform.h"
 #include "lsst/afw/geom/ellipses.h"
 #include "lsst/meas/base.h"
