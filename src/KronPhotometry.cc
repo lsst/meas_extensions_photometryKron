@@ -25,6 +25,7 @@
 #include <cmath>
 #include <functional>
 #include "boost/math/constants/constants.hpp"
+#include "lsst/utils/Cache.h"
 #include "lsst/pex/exceptions.h"
 #include "lsst/afw/geom/Point.h"
 #include "lsst/afw/geom/Box.h"
