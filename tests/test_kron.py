@@ -84,7 +84,7 @@ def makeGalaxy(width, height, flux, a, b, theta, dx=0.0, dy=0.0, xy0=None, xcen=
 
             if val < 0:
                 val = 0
-            gal.set(x, y, val/nsample**2)
+            gal[afwGeom.Point2I(x, y), afwImage.LOCAL] = val/nsample**2
 
             I += val
             Iuu += val*u**2
@@ -318,9 +318,9 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
 
         sumI = 0.0
         sumR = 0.38259771140356325/ab*(1 + math.sqrt(2)*math.hypot(math.fmod(xcen, 1), math.fmod(ycen, 1))) *\
-            objImg.getMaskedImage().getImage().get(int(xcen), int(ycen))
+            objImg.image[int(xcen), int(ycen), afwImage.LOCAL]
 
-        gal = objImg.getMaskedImage().getImage()
+        gal = objImg.image
 
         c, s = math.cos(theta), math.sin(theta)
         for sp in fpEllipse.getSpans():
@@ -333,7 +333,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
 
                 r = math.hypot(u, v*ab)
                 try:
-                    val = gal.get(x, y)
+                    val = gal[x, y, afwImage.LOCAL]
                 except:
                     continue
 
@@ -349,7 +349,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                 u = c*dx + s*dy
                 v = -s*dx + c*dy
                 if math.hypot(u/a, v/b) < kfac:
-                    sumI += gal.get(x, y)
+                    sumI += gal[x, y, afwImage.LOCAL]
 
         return R_K, sumI, 0, False, False, False
 
