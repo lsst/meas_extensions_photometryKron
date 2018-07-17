@@ -129,19 +129,15 @@ void declareKronAperture(py::module &mod) {
 
 }  // <anonymous>
 
-PYBIND11_PLUGIN(photometryKron) {
+PYBIND11_MODULE(photometryKron, mod) {
     py::module::import("lsst.afw.geom");
     py::module::import("lsst.afw.image");
     py::module::import("lsst.afw.table");
     py::module::import("lsst.daf.base");
 
-    py::module mod("photometryKron");
-
     declareKronFluxControl(mod);
     declareKronFluxAlgorithm(mod);
     declareKronAperture(mod);
-
-    return mod.ptr();
 }
 
 }  // photometryKron
