@@ -69,7 +69,7 @@ def makeGalaxy(width, height, flux, a, b, theta, dx=0.0, dy=0.0, xy0=None, xcen=
         for x in range(width):
             dx, dy = x + gal.getX0() - xcen, y + gal.getY0() - ycen
             if math.hypot(dx, dy) < 10.5:
-                nsample = float(5)
+                nsample = 5
                 subZ = np.linspace(-0.5*(1 - 1/nsample), 0.5*(1 - 1/nsample), nsample)
             else:
                 nsample = 1
