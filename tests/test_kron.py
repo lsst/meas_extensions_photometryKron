@@ -235,7 +235,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
 
         R_K = source.get("ext_photometryKron_KronFlux_radius")
         flux_K = source.get("ext_photometryKron_KronFlux_flux")
-        fluxErr_K = source.get("ext_photometryKron_KronFlux_fluxSigma")
+        fluxErr_K = source.get("ext_photometryKron_KronFlux_fluxErr")
         flags_K = source.get("ext_photometryKron_KronFlux_flag")
         if not flags_K:
             # Forced measurement on the same image should produce exactly the same result
@@ -245,7 +245,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
             self.assertTrue(algMeta.exists('ext_photometryKron_KronFlux_nRadiusForFlux'))
             for field in (
                 "ext_photometryKron_KronFlux_flux",
-                "ext_photometryKron_KronFlux_fluxSigma",
+                "ext_photometryKron_KronFlux_fluxErr",
                 "ext_photometryKron_KronFlux_radius",
                 "ext_photometryKron_KronFlux_flag"
             ):

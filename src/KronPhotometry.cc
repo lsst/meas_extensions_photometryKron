@@ -318,7 +318,7 @@ std::pair<double, double> photometer(
     }
     try {
         base::ApertureFluxResult fluxResult = base::ApertureFluxAlgorithm::computeSincFlux<float>(image, aperture);
-        return std::make_pair(fluxResult.flux, fluxResult.fluxSigma);
+        return std::make_pair(fluxResult.flux, fluxResult.fluxErr);
     } catch(pex::exceptions::LengthError &e) {
         LSST_EXCEPT_ADD(e, (boost::format("Measuring Kron flux for object at (%.3f, %.3f);"
                                           " aperture radius %g,%g theta %g")
@@ -425,7 +425,7 @@ void KronFluxAlgorithm::_applyAperture(
     // set the results in the source object
     meas::base::FluxResult fluxResult;
     fluxResult.flux = result.first;
-    fluxResult.fluxSigma = result.second;
+    fluxResult.fluxErr = result.second;
     source.set(_fluxResultKey, fluxResult);
     source.set(_radiusKey, aperture.getAxes().getDeterminantRadius());
     //
