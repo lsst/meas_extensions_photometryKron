@@ -5,13 +5,12 @@ _build.*
 *.pyc
 *.so
 .cache
+.pytest_cache
 .sconf_temp
 .sconsign.dblite
 config.log
-.sconsign.dblite
-config.log
-.sconf_temp
 pytest_session.txt
+.coverage
 doc/*.tag
 doc/html
 doc/xml
