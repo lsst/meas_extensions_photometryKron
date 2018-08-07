@@ -20,8 +20,6 @@
 # the GNU General Public License along with this program.  If not,
 # see <https://www.lsstcorp.org/LegalNotices/>.
 #
-from __future__ import print_function
-from builtins import range
 import math
 import unittest
 import sys
@@ -69,7 +67,7 @@ def makeGalaxy(width, height, flux, a, b, theta, dx=0.0, dy=0.0, xy0=None, xcen=
         for x in range(width):
             dx, dy = x + gal.getX0() - xcen, y + gal.getY0() - ycen
             if math.hypot(dx, dy) < 10.5:
-                nsample = float(5)
+                nsample = 5
                 subZ = np.linspace(-0.5*(1 - 1/nsample), 0.5*(1 - 1/nsample), nsample)
             else:
                 nsample = 1
@@ -235,7 +233,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
 
         R_K = source.get("ext_photometryKron_KronFlux_radius")
         flux_K = source.get("ext_photometryKron_KronFlux_flux")
-        fluxErr_K = source.get("ext_photometryKron_KronFlux_fluxSigma")
+        fluxErr_K = source.get("ext_photometryKron_KronFlux_fluxErr")
         flags_K = source.get("ext_photometryKron_KronFlux_flag")
         if not flags_K:
             # Forced measurement on the same image should produce exactly the same result
@@ -245,7 +243,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
             self.assertTrue(algMeta.exists('ext_photometryKron_KronFlux_nRadiusForFlux'))
             for field in (
                 "ext_photometryKron_KronFlux_flux",
-                "ext_photometryKron_KronFlux_fluxSigma",
+                "ext_photometryKron_KronFlux_fluxErr",
                 "ext_photometryKron_KronFlux_radius",
                 "ext_photometryKron_KronFlux_flag"
             ):
