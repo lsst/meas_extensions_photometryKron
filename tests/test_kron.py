@@ -62,7 +62,7 @@ def makeGalaxy(width, height, flux, a, b, theta, dx=0.0, dy=0.0, xy0=None, xcen=
         gal.setXY0(xy0)
 
     c, s = math.cos(math.radians(theta)), math.sin(math.radians(theta))
-    I, Iuu, Ivv = 0.0, 0.0, 0.0
+    ii, iuu, ivv = 0.0, 0.0, 0.0
     for y in range(height):
         for x in range(width):
             dx, dy = x + gal.getX0() - xcen, y + gal.getY0() - ycen
@@ -84,12 +84,12 @@ def makeGalaxy(width, height, flux, a, b, theta, dx=0.0, dy=0.0, xy0=None, xcen=
                 val = 0
             gal[afwGeom.Point2I(x, y), afwImage.LOCAL] = val/nsample**2
 
-            I += val
-            Iuu += val*u**2
-            Ivv += val*v**2
+            ii += val
+            iuu += val*u**2
+            ivv += val*v**2
 
-    Iuu /= I
-    Ivv /= I
+    iuu /= ii
+    ivv /= ii
 
     exp = afwImage.makeExposure(afwImage.makeMaskedImage(gal))
     exp.getMaskedImage().getVariance().set(1.0)
@@ -332,7 +332,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                 r = math.hypot(u, v*ab)
                 try:
                     val = gal[x, y, afwImage.LOCAL]
-                except:
+                except Exception:
                     continue
 
                 sumI += val
@@ -580,7 +580,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                         self.assertEqual(source.get("ext_photometryKron_KronFlux_flag"),
                                          forced.get("ext_photometryKron_KronFlux_flag")
                                          )
-                    except:
+                    except Exception:
                         print(("Failed:", angle, scale, offset,
                               [(source.get(f), forced.get(f)) for f in
                                ("ext_photometryKron_KronFlux_flux",
