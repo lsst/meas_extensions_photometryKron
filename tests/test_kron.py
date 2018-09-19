@@ -121,7 +121,7 @@ def makeMeasurementConfig(forced=False, nsigma=6.0, nIterForRadius=1, kfac=2.5):
     msConfig.slots.apFlux = "ext_photometryKron_KronFlux"
     msConfig.slots.modelFlux = None
     msConfig.slots.psfFlux = None
-    msConfig.slots.instFlux = None
+    msConfig.slots.gaussianFlux = None
     msConfig.slots.calibFlux = None
     # msConfig.algorithms.names.remove("correctfluxes")
     msConfig.plugins["ext_photometryKron_KronFlux"].nSigmaForRadius = nsigma
@@ -232,8 +232,8 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
         self.assertTrue(algMeta.exists('ext_photometryKron_KronFlux_nRadiusForFlux'))
 
         R_K = source.get("ext_photometryKron_KronFlux_radius")
-        flux_K = source.get("ext_photometryKron_KronFlux_flux")
-        fluxErr_K = source.get("ext_photometryKron_KronFlux_fluxErr")
+        flux_K = source.get("ext_photometryKron_KronFlux_instFlux")
+        fluxErr_K = source.get("ext_photometryKron_KronFlux_instFluxErr")
         flags_K = source.get("ext_photometryKron_KronFlux_flag")
         if not flags_K:
             # Forced measurement on the same image should produce exactly the same result
@@ -242,8 +242,8 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
             algMeta = source.getTable().getMetadata()
             self.assertTrue(algMeta.exists('ext_photometryKron_KronFlux_nRadiusForFlux'))
             for field in (
-                "ext_photometryKron_KronFlux_flux",
-                "ext_photometryKron_KronFlux_fluxErr",
+                "ext_photometryKron_KronFlux_instFlux",
+                "ext_photometryKron_KronFlux_instFluxErr",
                 "ext_photometryKron_KronFlux_radius",
                 "ext_photometryKron_KronFlux_flag"
             ):
@@ -569,8 +569,8 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                             shape.scale(r/shape.getDeterminantRadius())
                             ds9.dot(shape, xc, yc, ctype=ct, frame=2)
                     try:
-                        self.assertFloatsAlmostEqual(source.get("ext_photometryKron_KronFlux_flux"),
-                                                     forced.get("ext_photometryKron_KronFlux_flux"),
+                        self.assertFloatsAlmostEqual(source.get("ext_photometryKron_KronFlux_instFlux"),
+                                                     forced.get("ext_photometryKron_KronFlux_instFlux"),
                                                      rtol=1.0e-3
                                                      )
                         self.assertFloatsAlmostEqual(source.get("ext_photometryKron_KronFlux_radius"),
@@ -583,7 +583,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                     except Exception:
                         print(("Failed:", angle, scale, offset,
                               [(source.get(f), forced.get(f)) for f in
-                               ("ext_photometryKron_KronFlux_flux",
+                               ("ext_photometryKron_KronFlux_instFlux",
                                 "ext_photometryKron_KronFlux_radius",
                                 "ext_photometryKron_KronFlux_flag"
                                 )
