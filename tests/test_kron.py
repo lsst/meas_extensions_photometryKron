@@ -420,13 +420,13 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                                 if ignoreTestFailures:
                                     continue
 
-                                self.assertFalse(failR, (("%s  R_Kron: %g v. exact value %g " +
+                                self.assertFalse(failR, (("%s  R_Kron: %g v. exact value %g "
                                                           "(error %.3f pixels; limit %.3f)") %
                                                          (ID, R_K, R_truth, (R_K - R_truth),
                                                           1e-2*self.getTolRad(a, b))))
 
                                 self.assertFalse(failFlux,
-                                                 (("%s  flux_Kron: %g v. exact value %g " +
+                                                 (("%s  flux_Kron: %g v. exact value %g "
                                                    "(error %.2f%% limit %.2f%%)") %
                                                   (ID, flux_K, flux_truth, 100*(flux_K/flux_truth-1),
                                                    self.getTolFlux(a, b, kfac))))
