@@ -200,16 +200,14 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
             if not makeImage:
                 ds9.erase(frame=ds9Frame)
 
-            ds9.dot("+", xcen - self.objImg.getX0(), ycen - self.objImg.getY0(),
-                    size=1, ctype=ds9.RED, frame=ds9Frame)
-            ds9.pan(xcen - self.objImg.getX0(), ycen - self.objImg.getY0(), frame=ds9Frame)
+            ds9.pan(xcen, ycen, frame=ds9Frame)
+            ds9.dot("+", xcen, ycen, size=1, ctype=ds9.RED, frame=ds9Frame)
             c, s = math.cos(math.radians(theta)), math.sin(math.radians(theta))
             # N.b. add 1/12 in quadrature to allow for pixellisation
             ds9.dot("@:%f,%f,%f" % (nsigma**2*((a**2 + 1/12.0)*c**2 + (b**2 + 1/12.0)*s**2),
                                     nsigma**2*(a**2 - b**2)*c*s,
                                     nsigma**2*((a**2 + 1/12.0)*s**2 + (b**2 + 1/12.0)*c**2)),
-                    xcen - self.objImg.getX0(), ycen - self.objImg.getY0(),
-                    size=1, ctype=ds9.RED, frame=ds9Frame, silent=True)
+                    xcen, ycen, size=1, ctype=ds9.RED, frame=ds9Frame)
         #
         # Do the measuring
         #
@@ -258,21 +256,20 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                     raise
 
         if display:
-            xc, yc = xcen - objImg.getX0(), ycen - objImg.getY0()
-            ds9.dot("x", xc, yc, ctype=ds9.MAGENTA, size=1, frame=ds9Frame)
-            displayUtils.drawFootprint(source.getFootprint(), XY0=objImg.getXY0())
+            ds9.dot("x", xcen, ycen, ctype=ds9.MAGENTA, size=1, frame=ds9Frame)
+            displayUtils.drawFootprint(source.getFootprint())
 
             shape = source.getShape()
             if True:                    # nsigma*shape, the radius used to estimate R_K
                 shape = shape.clone()
-                shape.scale(source.get("ext_photometryKron_KronFlux_radiusForRadius") /
+                shape.scale(source.get("ext_photometryKron_KronFlux_radius_for_radius") /
                             shape.getDeterminantRadius())
-                ds9.dot(shape, xc, yc, ctype=ds9.MAGENTA, frame=ds9Frame)
+                ds9.dot(shape, xcen, ycen, ctype=ds9.MAGENTA, frame=ds9Frame)
             # Show R_K
             shape = shape.clone()
             for r, ct in [(R_K, ds9.BLUE), (R_K*kfac, ds9.CYAN), ]:
                 shape.scale(r/shape.getDeterminantRadius())
-                ds9.dot(shape, xc, yc, ctype=ct, frame=ds9Frame)
+                ds9.dot(shape, xcen, ycen, ctype=ct, frame=ds9Frame)
 
         return R_K, flux_K, fluxErr_K, flags_K, \
             source.get("ext_photometryKron_KronFlux_flag_bad_radius"), \
@@ -311,7 +308,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
         # Get footprint
         #
         ellipse = afwEllipses.Ellipse(afwEllipses.Axes(nsigma*a, nsigma*b, theta),
-                                      afwGeom.Point2D(xcen - objImg.getX0(), ycen - objImg.getY0()))
+                                      afwGeom.Point2D(xcen, ycen))
         fpEllipse = afwDetection.Footprint(ellipse)
 
         sumI = 0.0
@@ -560,11 +557,12 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                             shape.scale(r/shape.getDeterminantRadius())
                             ds9.dot(shape, xc, yc, ctype=ct, frame=1)
                         ds9.mtv(warped, frame=2)
-                        transform = (wcs.linearizeSkyToPixel(source.getCoord()) *
-                                     original.getWcs().linearizePixelToSky(source.getCoord()))
+                        transform = (wcs.linearizeSkyToPixel(source.getCoord(), lsst.geom.degrees) *
+                                     original.getWcs().linearizePixelToSky(source.getCoord(),
+                                                                           lsst.geom.degrees))
                         shape = shape.transform(transform.getLinear())
                         radius = source.get("ext_photometryKron_KronFlux_radius")
-                        xc, yc = wcs.skyToPixel(source.getCoord()) - afwGeom.Extent2D(warped.getXY0())
+                        xc, yc = wcs.skyToPixel(source.getCoord())
                         for r, ct in [(radius, ds9.BLUE), (radius*kfac, ds9.CYAN), ]:
                             shape.scale(r/shape.getDeterminantRadius())
                             ds9.dot(shape, xc, yc, ctype=ct, frame=2)
