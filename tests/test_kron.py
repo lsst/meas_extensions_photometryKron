@@ -28,6 +28,7 @@ import numpy as np
 import itertools
 import lsst.utils.tests
 import lsst.afw.detection as afwDetection
+import lsst.afw.display as afwDisplay
 import lsst.afw.geom as afwGeom
 import lsst.afw.geom.ellipses as afwEllipses
 import lsst.afw.image as afwImage
@@ -40,13 +41,11 @@ import lsst.meas.extensions.photometryKron
 from lsst.daf.base import PropertyList
 
 try:
-    type(verbose)
+    display
 except NameError:
     display = False
-    ds9Frame = 0
 
-import lsst.afw.display.ds9 as ds9
-import lsst.afw.display.utils as displayUtils
+afwDisplay.setDefaultMaskTransparency(75)
 
 
 def makeGalaxy(width, height, flux, a, b, theta, dx=0.0, dy=0.0, xy0=None, xcen=None, ycen=None):
@@ -192,26 +191,30 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
             a, b = b, a
             theta += 90
 
+        currentDisp = None
         if self.objImg is None:
             makeImage = True
         if makeImage:
-            self.objImg = makeGalaxy(self.width, self.height, self.flux, a, b, theta, dx, dy,
-                                     afwGeom.Point2I(10, 10), xcen=xcen, ycen=ycen)
-
+            self.objImg = makeGalaxy(self.width, self.height, self.flux, a, b, theta, dx=dx, dy=dy,
+                                     xy0=afwGeom.Point2I(10, 10), xcen=xcen, ycen=ycen)
             if display:
-                ds9.mtv(self.objImg, frame=ds9Frame, title="%g %g" % (a, b))
-        if display:
-            if not makeImage:
-                ds9.erase(frame=ds9Frame)
-
-            ds9.pan(xcen, ycen, frame=ds9Frame)
-            ds9.dot("+", xcen, ycen, size=1, ctype=ds9.RED, frame=ds9Frame)
+                disp = afwDisplay.Display(frame=0)
+                disp.mtv(self.objImg, title=self._testMethodName + ": %g %g" % (a, b))
+                currentDisp = disp
+        if not makeImage and display:
+            try:
+                currentDisp = disp
+            except NameError:
+                currentDisp = None
+        if currentDisp:
+            disp.pan(xcen, ycen)
+            disp.dot("+", xcen, ycen, size=1, ctype=afwDisplay.RED)
             c, s = math.cos(math.radians(theta)), math.sin(math.radians(theta))
             # N.b. add 1/12 in quadrature to allow for pixellisation
-            ds9.dot("@:%f,%f,%f" % (nsigma**2*((a**2 + 1/12.0)*c**2 + (b**2 + 1/12.0)*s**2),
-                                    nsigma**2*(a**2 - b**2)*c*s,
-                                    nsigma**2*((a**2 + 1/12.0)*s**2 + (b**2 + 1/12.0)*c**2)),
-                    xcen, ycen, size=1, ctype=ds9.RED, frame=ds9Frame)
+            disp.dot("@:%f,%f,%f" % (nsigma**2*((a**2 + 1/12.0)*c**2 + (b**2 + 1/12.0)*s**2),
+                                     nsigma**2*(a**2 - b**2)*c*s,
+                                     nsigma**2*((a**2 + 1/12.0)*s**2 + (b**2 + 1/12.0)*c**2)),
+                     xcen, ycen, size=1, ctype=afwDisplay.RED)
         #
         # Do the measuring
         #
@@ -220,9 +223,9 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
         self.objImg.setPsf(measAlg.DoubleGaussianPsf(ksize, ksize,
                                                      FWHM/(2*math.sqrt(2*math.log(2))), 1, 0.1))
 
-        return measureKron(self.objImg, xcen, ycen, nsigma, kfac, nIterForRadius)
+        return measureKron(self.objImg, xcen, ycen, nsigma, kfac, nIterForRadius, disp=currentDisp)
 
-    def measureKron(self, objImg, xcen, ycen, nsigma, kfac, nIterForRadius):
+    def measureKron(self, objImg, xcen, ycen, nsigma, kfac, nIterForRadius, disp=None):
         """Measure Kron quantities using the C++ code.
         """
         #
@@ -260,21 +263,20 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                     print("Failed:", field, source.get(field), forced.get(field))
                     raise
 
-        if display:
-            ds9.dot("x", xcen, ycen, ctype=ds9.MAGENTA, size=1, frame=ds9Frame)
-            displayUtils.drawFootprint(source.getFootprint())
-
+        if disp:
+            disp.dot("x", xcen, ycen, ctype=afwDisplay.MAGENTA, size=1)
+            afwDisplay.utils.drawFootprint(source.getFootprint(), display=disp)
             shape = source.getShape()
             if True:                    # nsigma*shape, the radius used to estimate R_K
                 shape = shape.clone()
                 shape.scale(source.get("ext_photometryKron_KronFlux_radius_for_radius") /
                             shape.getDeterminantRadius())
-                ds9.dot(shape, xcen, ycen, ctype=ds9.MAGENTA, frame=ds9Frame)
+                disp.dot(shape, xcen, ycen, ctype=afwDisplay.MAGENTA)
             # Show R_K
             shape = shape.clone()
-            for r, ct in [(R_K, ds9.BLUE), (R_K*kfac, ds9.CYAN), ]:
+            for r, ct in [(R_K, afwDisplay.BLUE), (R_K*kfac, afwDisplay.CYAN), ]:
                 shape.scale(r/shape.getDeterminantRadius())
-                ds9.dot(shape, xcen, ycen, ctype=ct, frame=ds9Frame)
+                disp.dot(shape, xcen, ycen, ctype=ct)
 
         return (R_K, flux_K, fluxErr_K, flags_K,
                 source.get("ext_photometryKron_KronFlux_flag_bad_radius"),
@@ -556,23 +558,25 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                     self.assertTrue(algMeta.exists('ext_photometryKron_KronFlux_nRadiusForFlux'))
 
                     if display:
-                        ds9.mtv(original, frame=1)
+                        disp1 = afwDisplay.Display(frame=1)
+                        disp1.mtv(original, title=self._testMethodName + ": original image")
                         shape = source.getShape().clone()
                         xc, yc = source.getCentroid()
                         radius = source.get("ext_photometryKron_KronFlux_radius")
-                        for r, ct in [(radius, ds9.BLUE), (radius*kfac, ds9.CYAN), ]:
+                        for r, ct in [(radius, afwDisplay.BLUE), (radius*kfac, afwDisplay.CYAN), ]:
                             shape.scale(r/shape.getDeterminantRadius())
-                            ds9.dot(shape, xc, yc, ctype=ct, frame=1)
-                        ds9.mtv(warped, frame=2)
+                            disp1.dot(shape, xc, yc, ctype=ct)
+                        disp2 = afwDisplay.Display(frame=2)
+                        disp2.mtv(warped, title=self._testMethodName + ": warped image")
                         transform = (wcs.linearizeSkyToPixel(source.getCoord(), lsst.geom.degrees) *
                                      original.getWcs().linearizePixelToSky(source.getCoord(),
                                                                            lsst.geom.degrees))
                         shape = shape.transform(transform.getLinear())
                         radius = source.get("ext_photometryKron_KronFlux_radius")
                         xc, yc = wcs.skyToPixel(source.getCoord())
-                        for r, ct in [(radius, ds9.BLUE), (radius*kfac, ds9.CYAN), ]:
+                        for r, ct in [(radius, afwDisplay.BLUE), (radius*kfac, afwDisplay.CYAN), ]:
                             shape.scale(r/shape.getDeterminantRadius())
-                            ds9.dot(shape, xc, yc, ctype=ct, frame=2)
+                            disp2.dot(shape, xc, yc, ctype=ct)
                     try:
                         self.assertFloatsAlmostEqual(source.get("ext_photometryKron_KronFlux_instFlux"),
                                                      forced.get("ext_photometryKron_KronFlux_instFlux"),
