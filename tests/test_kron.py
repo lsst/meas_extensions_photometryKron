@@ -50,7 +50,8 @@ import lsst.afw.display.utils as displayUtils
 
 
 def makeGalaxy(width, height, flux, a, b, theta, dx=0.0, dy=0.0, xy0=None, xcen=None, ycen=None):
-    """Make a fake galaxy image"""
+    """Make a fake galaxy image.
+    """
     gal = afwImage.ImageF(width, height)
     if xcen is None:
         xcen = 0.5*width + dx
@@ -93,7 +94,7 @@ def makeGalaxy(width, height, flux, a, b, theta, dx=0.0, dy=0.0, xy0=None, xcen=
 
     exp = afwImage.makeExposure(afwImage.makeMaskedImage(gal))
     exp.getMaskedImage().getVariance().set(1.0)
-    scale = 1.0e-4 * afwGeom.degrees
+    scale = 1.0e-4*afwGeom.degrees
     cdMatrix = afwGeom.makeCdMatrix(scale=scale, flipX=True)
     exp.setWcs(afwGeom.makeSkyWcs(crpix=afwGeom.Point2D(0.0, 0.0),
                                   crval=afwGeom.SpherePoint(0.0, 0.0, afwGeom.degrees),
@@ -104,7 +105,8 @@ def makeGalaxy(width, height, flux, a, b, theta, dx=0.0, dy=0.0, xy0=None, xcen=
 
 
 def makeMeasurementConfig(forced=False, nsigma=6.0, nIterForRadius=1, kfac=2.5):
-    """Construct a (SingleFrame|Forced)MeasurementConfig with the requested parameters"""
+    """Construct a (SingleFrame|Forced)MeasurementConfig with the requested parameters.
+    """
     if forced:
         msConfig = measBase.ForcedMeasurementConfig()
         msConfig.algorithms.names = ["base_TransformedCentroid", "base_TransformedShape",
@@ -132,7 +134,8 @@ def makeMeasurementConfig(forced=False, nsigma=6.0, nIterForRadius=1, kfac=2.5):
 
 
 def measureFree(exposure, center, msConfig):
-    """Unforced measurement"""
+    """Unforced measurement.
+    """
     schema = afwTable.SourceTable.makeMinimalSchema()
     algMeta = PropertyList()
     task = measBase.SingleFrameMeasurementTask(schema, config=msConfig, algMetadata=algMeta)
@@ -147,7 +150,8 @@ def measureFree(exposure, center, msConfig):
 
 
 def measureForced(exposure, source, refWcs, msConfig):
-    """Forced measurement"""
+    """Forced measurement.
+    """
     refCat = afwTable.SourceCatalog(source.table)
     refCat.append(source)
     schema = afwTable.SourceTable.makeMinimalSchema()
@@ -161,7 +165,8 @@ def measureForced(exposure, source, refWcs, msConfig):
 
 
 class KronPhotometryTestCase(lsst.utils.tests.TestCase):
-    """A test case for measuring Kron quantities"""
+    """A test case for measuring Kron quantities.
+    """
 
     def setUp(self):
         self.flux = 1e5
@@ -173,10 +178,9 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
             del self.objImg
 
     def makeAndMeasure(self, measureKron, a, b, theta, dx=0.0, dy=0.0, nsigma=6, kfac=2, nIterForRadius=1,
-                       xcen=None, ycen=None,
-                       makeImage=True):
-        """Make and measure an elliptical Gaussian"""
-
+                       xcen=None, ycen=None, makeImage=True):
+        """Make and measure an elliptical Gaussian.
+        """
         if xcen is None:
             xcen = 0.5*self.width + dx
         if ycen is None:
@@ -219,7 +223,8 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
         return measureKron(self.objImg, xcen, ycen, nsigma, kfac, nIterForRadius)
 
     def measureKron(self, objImg, xcen, ycen, nsigma, kfac, nIterForRadius):
-        """Measure Kron quantities using the C++ code"""
+        """Measure Kron quantities using the C++ code.
+        """
         #
         # Now measure things
         #
@@ -271,12 +276,12 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                 shape.scale(r/shape.getDeterminantRadius())
                 ds9.dot(shape, xcen, ycen, ctype=ct, frame=ds9Frame)
 
-        return R_K, flux_K, fluxErr_K, flags_K, \
-            source.get("ext_photometryKron_KronFlux_flag_bad_radius"), \
-            source.get("ext_photometryKron_KronFlux_flag_small_radius")
+        return (R_K, flux_K, fluxErr_K, flags_K,
+                source.get("ext_photometryKron_KronFlux_flag_bad_radius"),
+                source.get("ext_photometryKron_KronFlux_flag_small_radius"))
 
     def measureKronInPython(self, objImg, xcen, ycen, nsigma, kfac, nIterForRadius, makeImage=None):
-        """Measure the Kron quantities of an elliptical Gaussian in python
+        """Measure the Kron quantities of an elliptical Gaussian in python.
 
         N.b. only works for XY0 == (0, 0)
         """
@@ -312,8 +317,8 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
         fpEllipse = afwDetection.Footprint(ellipse)
 
         sumI = 0.0
-        sumR = 0.38259771140356325/ab*(1 + math.sqrt(2)*math.hypot(math.fmod(xcen, 1), math.fmod(ycen, 1))) *\
-            objImg.image[int(xcen), int(ycen), afwImage.LOCAL]
+        sumR = (0.38259771140356325/ab*(1 + math.sqrt(2)*math.hypot(math.fmod(xcen, 1), math.fmod(ycen, 1))) *
+                objImg.image[int(xcen), int(ycen), afwImage.LOCAL])
 
         gal = objImg.image
 
@@ -349,8 +354,8 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
         return R_K, sumI, 0, False, False, False
 
     def testEllipticalGaussian(self):
-        """Test measuring the Kron quantities of an elliptical Gaussian"""
-
+        """Test measuring the Kron quantities of an elliptical Gaussian.
+        """
         ignoreTestFailures = False  # if True, keep going after test failures but always generate a failure
         #
         # Choose function that does the measuring
@@ -364,8 +369,8 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
         #
         ab_vals = (0.5, 1.0, 2.0, 3.0, 5.0, )
         nIter = 2
-        for dx in (0.0, 0.5,):
-            for dy in (0.0, 0.5,):
+        for dx in (0.0, 0.5, ):
+            for dy in (0.0, 0.5, ):
                 if measureKron == self.measureKronInPython and dx + dy != 0.0:
                     continue
 
@@ -376,10 +381,10 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                                 continue
 
                             makeImage = True
-                            for kfac in (1.5, 2.5,):        # multiple of R_Kron to use for Flux_Kron
-                                R_K, flux_K, fluxErr_K, flags_K, flags_radius, flags_small_radius = \
+                            for kfac in (1.5, 2.5, ):        # multiple of R_Kron to use for Flux_Kron
+                                R_K, flux_K, fluxErr_K, flags_K, flags_radius, flags_small_radius = (
                                     self.makeAndMeasure(measureKron, a, b, theta, dx=dx, dy=dy, kfac=kfac,
-                                                        nIterForRadius=nIter, makeImage=makeImage)
+                                                        nIterForRadius=nIter, makeImage=makeImage))
                                 makeImage = False
 
                                 self.assertFalse(flags_radius)
@@ -398,13 +403,13 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                                 flux_truth = self.flux*(1 - math.exp(-0.5*(kfac*R_truth)**2))
                                 R_truth = R_truth0*math.sqrt(a*b + 1/12.0*(1 + 0.00286/min(a, b)**3.9))
 
-                                failR = math.isnan(R_K) or flags_K or \
-                                    abs(R_truth - R_K) > 1e-2*self.getTolRad(a, b)
-                                failFlux = math.isnan(flux_K) or flags_K or \
-                                    abs(flux_K/flux_truth - 1) > 1e-2*self.getTolFlux(a, b, kfac)
+                                failR = math.isnan(R_K) or flags_K or (
+                                    abs(R_truth - R_K) > 1e-2*self.getTolRad(a, b))
+                                failFlux = math.isnan(flux_K) or flags_K or (
+                                    abs(flux_K/flux_truth - 1) > 1e-2*self.getTolFlux(a, b, kfac))
 
-                                ID = "a,b,theta %4.1f %4.1f %4.1f  dx,dy = %.1f,%.1f  kfac=%g" % \
-                                    (a, b, theta, dx, dy, kfac)
+                                ID = ("a,b,theta %4.1f %4.1f %4.1f  dx,dy = %.1f,%.1f  kfac=%g" %
+                                      (a, b, theta, dx, dy, kfac))
                                 if ((failR or failFlux) and verbose) or verbose > 1:
                                     print("%s R_K    %10.3f %10.3f %6.3f pixels (tol %5.3f)%s" %
                                           (ID, R_K, R_truth, (R_K - R_truth), 1e-2*self.getTolRad(a, b),
@@ -425,7 +430,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                                 self.assertFalse(failFlux,
                                                  (("%s  flux_Kron: %g v. exact value %g "
                                                    "(error %.2f%% limit %.2f%%)") %
-                                                  (ID, flux_K, flux_truth, 100*(flux_K/flux_truth-1),
+                                                  (ID, flux_K, flux_truth, 100*(flux_K/flux_truth - 1),
                                                    self.getTolFlux(a, b, kfac))))
 
         self.assertFalse(ignoreTestFailures, "You are ignoring possible test failures")
@@ -438,9 +443,9 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
         for cen in (10, 20, 38, 40, 50, self.width - 10):
             makeImage = True
             for kfac in (2.5, 10,):
-                R_K, flux_K, fluxErr_K, flags_K, flags_radius, flags_small_radius = \
+                R_K, flux_K, fluxErr_K, flags_K, flags_radius, flags_small_radius = (
                     self.makeAndMeasure(self.measureKron, a, b, theta, makeImage=makeImage,
-                                        xcen=cen, ycen=cen, kfac=kfac)
+                                        xcen=cen, ycen=cen, kfac=kfac))
                 makeImage = False
 
                 msg = "KronFlux_flag_bad_radius: cen = (%g, %g), kfac = %g" % (cen, cen, kfac)
@@ -453,8 +458,8 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                     self.assertFalse(flags_K, msg)
 
     def getTolRad(self, a, b):
-        """Return R_K tolerance in hundredths of a pixel"""
-
+        """Return R_K tolerance in hundredths of a pixel.
+        """
         if b <= 0.5:
             if a <= 0.5:
                 tol = 35
@@ -470,7 +475,8 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
         return tol
 
     def getTolFlux(self, a, b, kfac):
-        """Return Flux_K tolerance in percent"""
+        """Return Flux_K tolerance in percent.
+        """
         if b <= 0.5:
             if a <= 0.5:
                 if kfac > 2:
@@ -510,7 +516,8 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
         return tol
 
     def testForced(self):
-        """Check that forced photometry works in the presence of rotations and translations"""
+        """Check that forced photometry works in the presence of rotations and translations.
+        """
         kfac = 2.5
         warper = afwMath.Warper("lanczos4")
         a = 13
@@ -527,7 +534,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                 if source.get("ext_photometryKron_KronFlux_flag"):
                     continue
 
-                angleList = [val * afwGeom.degrees for val in (45, 90)]
+                angleList = [val*afwGeom.degrees for val in (45, 90)]
                 scaleList = [1.0, 0.5]
                 offsetList = [(1.23, 4.56), (12.3, 45.6)]
 
