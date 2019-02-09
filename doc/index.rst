@@ -9,5 +9,4 @@ meas_extensions_photometryKron documentation preview
 .. toctree::
    :maxdepth: 1
 
-   meas_extensions_photometryKron/index
    lsst.meas.extensions.photometryKron/index
