@@ -104,9 +104,9 @@ public:
     typedef KronFluxControl Control;
 
     KronFluxAlgorithm(
-        Control const & ctrl, 
-        std::string const & name, 
-        afw::table::Schema & schema, 
+        Control const & ctrl,
+        std::string const & name,
+        afw::table::Schema & schema,
         daf::base::PropertySet & metadata
     );
 
