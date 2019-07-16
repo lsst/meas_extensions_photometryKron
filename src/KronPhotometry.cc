@@ -26,8 +26,8 @@
 #include <functional>
 #include "boost/math/constants/constants.hpp"
 #include "lsst/pex/exceptions.h"
-#include "lsst/afw/geom/Point.h"
-#include "lsst/afw/geom/Box.h"
+#include "lsst/geom/Point.h"
+#include "lsst/geom/Box.h"
 #include "lsst/afw/geom/SpanSet.h"
 #include "lsst/afw/image/Exposure.h"
 #include "lsst/afw/table/Source.h"
@@ -35,7 +35,7 @@
 #include "lsst/afw/math/FunctionLibrary.h"
 #include "lsst/afw/math/KernelFunctions.h"
 #include "lsst/afw/detection/Psf.h"
-#include "lsst/afw/geom/AffineTransform.h"
+#include "lsst/geom/AffineTransform.h"
 #include "lsst/afw/geom/ellipses.h"
 #include "lsst/meas/base.h"
 #include "lsst/meas/base/ApertureFlux.h"
@@ -83,7 +83,7 @@ public:
     void reset(afw::detection::Footprint const&) {}
 
     /// @brief method called for each pixel by applyFunctor
-    void operator()(afw::geom::Point2I const & pos,
+    void operator()(geom::Point2I const & pos,
                     typename MaskedImageT::Image::Pixel const & ival,
                     typename MaskedImageT::Variance::Pixel const & vval) {
         _sum += ival;
@@ -116,7 +116,7 @@ template <typename MaskedImageT, typename WeightImageT>
 class FootprintFindMoment {
 public:
     FootprintFindMoment(MaskedImageT const& mimage, ///< The image the source lives in
-                        afw::geom::Point2D const& center, // center of the object
+                        geom::Point2D const& center, // center of the object
                         double const ab,                // axis ratio
                         double const theta // rotation of ellipse +ve from x axis
         ) : _xcen(center.getX()), _ycen(center.getY()),
@@ -139,7 +139,7 @@ public:
 #endif
 
         MaskedImageT const& mimage = this->getImage();
-        afw::geom::Box2I const& bbox(foot.getBBox());
+        geom::Box2I const& bbox(foot.getBBox());
         int const x0 = bbox.getMinX(), y0 = bbox.getMinY(), x1 = bbox.getMaxX(), y1 = bbox.getMaxY();
 
         if (x0 < _imageX0 || y0 < _imageY0 ||
@@ -154,7 +154,7 @@ public:
     }
 
     /// @brief method called for each pixel by applyFunctor
-    void operator()(afw::geom::Point2I const & pos, typename MaskedImageT::Image::Pixel const & ival) {
+    void operator()(geom::Point2I const & pos, typename MaskedImageT::Image::Pixel const & ival) {
         double x = static_cast<double>(pos.getX());
         double y = static_cast<double>(pos.getY());
         double const dx = x - _xcen;
@@ -177,7 +177,7 @@ public:
              */
 
             double const eR = 0.38259771140356325; // <r> for a single square pixel, about the centre
-            r = ::hypot(r, eR*(1 + ::hypot(dx, dy)/afw::geom::ROOT2));
+            r = ::hypot(r, eR*(1 + ::hypot(dx, dy)/geom::ROOT2));
         }
 #endif
 
@@ -220,7 +220,7 @@ private:
 
 afw::geom::ellipses::Axes KronAperture::getKronAxes(
     afw::geom::ellipses::Axes const& shape,
-    afw::geom::LinearTransform const& transformation,
+    geom::LinearTransform const& transformation,
     double const radius
     )
 {
@@ -233,7 +233,7 @@ template<typename ImageT>
 PTR(KronAperture) KronAperture::determineRadius(
     ImageT const& image,
     afw::geom::ellipses::Axes axes,
-    afw::geom::Point2D const& center,
+    geom::Point2D const& center,
     KronFluxControl const& ctrl
     )
 {
@@ -258,7 +258,7 @@ PTR(KronAperture) KronAperture::determineRadius(
         //
         afw::detection::Footprint foot(afw::geom::SpanSet::fromShape(
             afw::geom::ellipses::Ellipse(axes, center)));
-        afw::geom::Box2I bbox = !smoothImage ?
+        geom::Box2I bbox = !smoothImage ?
             foot.getBBox() :
             kernel.growBBox(foot.getBBox()); // the smallest bbox needed to convolve with Kernel
         bbox.clip(image.getBBox());
@@ -323,7 +323,7 @@ std::pair<double, double> photometer(
         LSST_EXCEPT_ADD(e, (boost::format("Measuring Kron flux for object at (%.3f, %.3f);"
                                           " aperture radius %g,%g theta %g")
                             % aperture.getCenter().getX() % aperture.getCenter().getY()
-                            % axes.getA() % axes.getB() % afw::geom::radToDeg(axes.getTheta())).str());
+                            % axes.getA() % axes.getB() % geom::radToDeg(axes.getTheta())).str());
         throw e;
     }
 }
@@ -331,14 +331,14 @@ std::pair<double, double> photometer(
 
 double calculatePsfKronRadius(
     CONST_PTR(afw::detection::Psf) const& psf, // PSF to measure
-    afw::geom::Point2D const& center, // Centroid of source on parent image
+    geom::Point2D const& center, // Centroid of source on parent image
     double smoothingSigma=0.0         // Gaussian sigma of smoothing applied
     )
 {
     assert(psf);
     double const radius = psf->computeShape(center).getDeterminantRadius();
     // For a Gaussian N(0, sigma^2), the Kron radius is sqrt(pi/2)*sigma
-    return ::sqrt(afw::geom::PI/2)*::hypot(radius, std::max(0.0, smoothingSigma));
+    return ::sqrt(geom::PI/2)*::hypot(radius, std::max(0.0, smoothingSigma));
 }
 
 template<typename ImageT>
@@ -436,9 +436,9 @@ void KronFluxAlgorithm::_applyAperture(
 void KronFluxAlgorithm::_applyForced(
         afw::table::SourceRecord & source,
         afw::image::Exposure<float> const & exposure,
-        afw::geom::Point2D const & center,
+        geom::Point2D const & center,
         afw::table::SourceRecord const & reference,
-        afw::geom::AffineTransform const & refToMeas
+        geom::AffineTransform const & refToMeas
     ) const
 {
     float const radius = reference.get(reference.getSchema().find<float>(_ctrl.refRadiusName).key);
@@ -453,7 +453,7 @@ void KronFluxAlgorithm::measure(
                       afw::table::SourceRecord & source,
                       afw::image::Exposure<float> const& exposure
                      ) const {
-    afw::geom::Point2D center = _centroidExtractor(source, _flagHandler);
+    geom::Point2D center = _centroidExtractor(source, _flagHandler);
 
     // Did we hit a condition that fundamentally prevented measuring the Kron flux?
     // Such conditions include hitting the edge of the image and bad input shape, but not low signal-to-noise.
@@ -563,7 +563,7 @@ void KronFluxAlgorithm::measureForced(
         afw::table::SourceRecord const & refRecord,
         afw::geom::SkyWcs const & refWcs
     ) const {
-    afw::geom::Point2D center = _centroidExtractor(measRecord, _flagHandler);
+    geom::Point2D center = _centroidExtractor(measRecord, _flagHandler);
     auto xytransform = afw::geom::makeWcsPairTransform(refWcs, *exposure.getWcs());
     _applyForced(measRecord, exposure, center, refRecord,
                     linearizeTransform(*xytransform, refRecord.getCentroid())
@@ -600,7 +600,7 @@ PTR(KronAperture) KronFluxAlgorithm::_fallbackRadius(afw::table::SourceRecord& s
 template PTR(KronAperture) KronAperture::determineRadius<afw::image::MaskedImage<TYPE> >( \
     afw::image::MaskedImage<TYPE> const&, \
     afw::geom::ellipses::Axes, \
-    afw::geom::Point2D const&, \
+    geom::Point2D const&, \
     KronFluxControl const& \
     ); \
 template std::pair<double, double> KronAperture::measureFlux<afw::image::MaskedImage<TYPE> >( \

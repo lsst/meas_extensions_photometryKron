@@ -27,6 +27,7 @@
 #include <cmath>
 
 #include "lsst/pex/config.h"
+#include "lsst/geom.h"
 #include "lsst/afw/image/Exposure.h"
 #include "lsst/afw/geom/SkyWcs.h"
 #include "lsst/meas/base/Algorithm.h"
@@ -138,9 +139,9 @@ private:
     void _applyForced(
         afw::table::SourceRecord & source,
         afw::image::Exposure<float> const & exposure,
-        afw::geom::Point2D const & center,
+        geom::Point2D const & center,
         afw::table::SourceRecord const & reference,
-        afw::geom::AffineTransform const & refToMeas
+        geom::AffineTransform const & refToMeas
     ) const;
 
     PTR(KronAperture) _fallbackRadius(afw::table::SourceRecord& source, double const R_K_psf,
@@ -158,7 +159,7 @@ private:
 
 class KronAperture {
 public:
-    KronAperture(afw::geom::Point2D const& center, afw::geom::ellipses::BaseCore const& core,
+    KronAperture(geom::Point2D const& center, afw::geom::ellipses::BaseCore const& core,
                  float radiusForRadius=std::nanf("")) :
         _center(center),
         _axes(core),
@@ -166,12 +167,12 @@ public:
         {}
 
     explicit KronAperture(afw::table::SourceRecord const& source, float radiusForRadius=std::nanf("")) :
-        _center(afw::geom::Point2D(source.getX(), source.getY())),
+        _center(geom::Point2D(source.getX(), source.getY())),
         _axes(source.getShape()),
         _radiusForRadius(radiusForRadius)
         {}
 
-    KronAperture(afw::table::SourceRecord const& reference, afw::geom::AffineTransform const& refToMeas,
+    KronAperture(afw::table::SourceRecord const& reference, geom::AffineTransform const& refToMeas,
                  double radius, float radiusForRadius=std::nanf("")) :
         _center(refToMeas(reference.getCentroid())),
         _axes(getKronAxes(reference.getShape(), refToMeas.getLinear(), radius)),
@@ -183,7 +184,7 @@ public:
     double getY() const { return _center.getY(); }
     float getRadiusForRadius() const { return _radiusForRadius; }
 
-    afw::geom::Point2D const& getCenter() const { return _center; }
+    geom::Point2D const& getCenter() const { return _center; }
 
     afw::geom::ellipses::Axes & getAxes() { return _axes; }
 
@@ -198,7 +199,7 @@ public:
     static PTR(KronAperture) determineRadius(
         ImageT const& image,  ///< Image to measure
         afw::geom::ellipses::Axes axes,  ///< Shape of aperture
-        afw::geom::Point2D const& center,   ///< Centre of source
+        geom::Point2D const& center,   ///< Centre of source
         KronFluxControl const& ctrl  ///< control the algorithm
         );
 
@@ -211,8 +212,8 @@ public:
         ) const;
 
     /// Transform a Kron Aperture to a different frame
-    PTR(KronAperture) transform(afw::geom::AffineTransform const& trans) const {
-        afw::geom::Point2D const center = trans(getCenter());
+    PTR(KronAperture) transform(geom::AffineTransform const& trans) const {
+        geom::Point2D const center = trans(getCenter());
         afw::geom::ellipses::Axes const axes(*getAxes().transform(trans.getLinear()).copy());
         return std::make_shared<KronAperture>(center, axes);
     }
@@ -221,12 +222,12 @@ public:
     static
     afw::geom::ellipses::Axes getKronAxes(
         afw::geom::ellipses::Axes const& shape,
-        afw::geom::LinearTransform const& transformation,
+        geom::LinearTransform const& transformation,
         double const radius
         );
 
 private:
-    afw::geom::Point2D const _center;     // Center of aperture
+    geom::Point2D const _center;     // Center of aperture
     afw::geom::ellipses::Axes _axes;      // Ellipse defining aperture shape
     float _radiusForRadius;               // Radius used to estimate the Kron radius
 };

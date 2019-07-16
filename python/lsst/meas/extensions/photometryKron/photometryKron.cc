@@ -26,9 +26,9 @@
 #include <cstdint>
 
 #include "lsst/pex/config/python.h"  // defines LSST_DECLARE_CONTROL_FIELD
-#include "lsst/afw/geom/Point.h"
+#include "lsst/geom/Point.h"
 #include "lsst/afw/geom/ellipses.h"
-#include "lsst/afw/geom/AffineTransform.h"
+#include "lsst/geom/AffineTransform.h"
 #include "lsst/afw/image/MaskedImage.h"
 #include "lsst/afw/table/Source.h"
 #include "lsst/meas/base/Algorithm.h"
@@ -107,11 +107,11 @@ void declareKronApertureTemplatedMethods(PyKronAperture &cls) {
 void declareKronAperture(py::module &mod) {
     PyKronAperture cls(mod, "KronAperture");
 
-    cls.def(py::init<afw::geom::Point2D const &, afw::geom::ellipses::BaseCore const &, float>(), "center"_a,
+    cls.def(py::init<geom::Point2D const &, afw::geom::ellipses::BaseCore const &, float>(), "center"_a,
             "core"_a, "radiusForRadius"_a = std::nanf(""));
     cls.def(py::init<afw::table::SourceRecord const &, float>(), "source"_a,
             "radiusForRadius"_a = std::nanf(""));
-    cls.def(py::init<afw::table::SourceRecord const &, afw::geom::AffineTransform const &, double, float>(),
+    cls.def(py::init<afw::table::SourceRecord const &, geom::AffineTransform const &, double, float>(),
             "reference"_a, "refToMeas"_a, "radius"_a, "radiusForRadius"_a = std::nanf(""));
 
     cls.def_static("getKronAxes", &KronAperture::getKronAxes, "shape"_a, "transformation"_a, "radius"_a);
