@@ -29,6 +29,7 @@ import itertools
 import lsst.utils.tests
 import lsst.afw.detection as afwDetection
 import lsst.afw.display as afwDisplay
+import lsst.geom as geom
 import lsst.afw.geom as afwGeom
 import lsst.afw.geom.ellipses as afwEllipses
 import lsst.afw.image as afwImage
@@ -82,7 +83,7 @@ def makeGalaxy(width, height, flux, a, b, theta, dx=0.0, dy=0.0, xy0=None, xcen=
 
             if val < 0:
                 val = 0
-            gal[afwGeom.Point2I(x, y), afwImage.LOCAL] = val/nsample**2
+            gal[geom.Point2I(x, y), afwImage.LOCAL] = val/nsample**2
 
             ii += val
             iuu += val*u**2
@@ -93,10 +94,10 @@ def makeGalaxy(width, height, flux, a, b, theta, dx=0.0, dy=0.0, xy0=None, xcen=
 
     exp = afwImage.makeExposure(afwImage.makeMaskedImage(gal))
     exp.getMaskedImage().getVariance().set(1.0)
-    scale = 1.0e-4*afwGeom.degrees
+    scale = 1.0e-4*geom.degrees
     cdMatrix = afwGeom.makeCdMatrix(scale=scale, flipX=True)
-    exp.setWcs(afwGeom.makeSkyWcs(crpix=afwGeom.Point2D(0.0, 0.0),
-                                  crval=afwGeom.SpherePoint(0.0, 0.0, afwGeom.degrees),
+    exp.setWcs(afwGeom.makeSkyWcs(crpix=geom.Point2D(0.0, 0.0),
+                                  crval=geom.SpherePoint(0.0, 0.0, geom.degrees),
                                   cdMatrix=cdMatrix))
     # add a dummy Psf.  The new SdssCentroid needs one
     exp.setPsf(afwDetection.GaussianPsf(11, 11, 0.01))
@@ -196,7 +197,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
             makeImage = True
         if makeImage:
             self.objImg = makeGalaxy(self.width, self.height, self.flux, a, b, theta, dx=dx, dy=dy,
-                                     xy0=afwGeom.Point2I(10, 10), xcen=xcen, ycen=ycen)
+                                     xy0=geom.Point2I(10, 10), xcen=xcen, ycen=ycen)
             if display:
                 disp = afwDisplay.Display(frame=0)
                 disp.mtv(self.objImg, title=self._testMethodName + ": %g %g" % (a, b))
@@ -231,7 +232,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
         #
         # Now measure things
         #
-        center = afwGeom.Point2D(xcen, ycen)
+        center = geom.Point2D(xcen, ycen)
         msConfig = makeMeasurementConfig(False, nsigma, nIterForRadius, kfac)
         source = measureFree(objImg, center, msConfig)
         algMeta = source.getTable().getMetadata()
@@ -292,7 +293,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
         #
         # Note: this code was converted to the new meas_framework, but is not exercised.
         msConfig = makeMeasurementConfig(False, nsigma, nIterForRadius, kfac)
-        center = afwGeom.Point2D(xcen, ycen)
+        center = geom.Point2D(xcen, ycen)
         source = self.measureFree(objImg, center, msConfig)
         algMeta = source.getTable().getMetadata()
         self.assertTrue(algMeta.exists('ext_photometryKron_KronFlux_nRadiusForFlux'))
@@ -315,7 +316,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
         # Get footprint
         #
         ellipse = afwEllipses.Ellipse(afwEllipses.Axes(nsigma*a, nsigma*b, theta),
-                                      afwGeom.Point2D(xcen, ycen))
+                                      geom.Point2D(xcen, ycen))
         fpEllipse = afwDetection.Footprint(ellipse)
 
         sumI = 0.0
@@ -527,7 +528,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
             b = a*axisRatio
             for theta in (0, 30, 45):
                 width, height = 256, 256
-                center = afwGeom.Point2D(0.5*width, 0.5*height)
+                center = geom.Point2D(0.5*width, 0.5*height)
                 original = makeGalaxy(width, height, 1000.0, a, b, theta)
                 msConfig = makeMeasurementConfig(forced=False, kfac=kfac)
                 source = measureFree(original, center, msConfig)
@@ -536,7 +537,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                 if source.get("ext_photometryKron_KronFlux_flag"):
                     continue
 
-                angleList = [val*afwGeom.degrees for val in (45, 90)]
+                angleList = [val*geom.degrees for val in (45, 90)]
                 scaleList = [1.0, 0.5]
                 offsetList = [(1.23, 4.56), (12.3, 45.6)]
 
@@ -544,8 +545,8 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                     dx, dy = offset
                     pixelScale = original.getWcs().getPixelScale()*scale
                     cdMatrix = afwGeom.makeCdMatrix(scale=pixelScale, orientation=angle, flipX=True)
-                    wcs = afwGeom.makeSkyWcs(crpix=afwGeom.Point2D(dx, dy),
-                                             crval=afwGeom.SpherePoint(0.0, 0.0, afwGeom.degrees),
+                    wcs = afwGeom.makeSkyWcs(crpix=geom.Point2D(dx, dy),
+                                             crval=geom.SpherePoint(0.0, 0.0, geom.degrees),
                                              cdMatrix=cdMatrix)
 
                     warped = warper.warpExposure(wcs, original)
