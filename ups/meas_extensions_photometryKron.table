@@ -1,5 +1,4 @@
 setupRequired(meas_base)
-setupRequired(pybind11)
 setupOptional(meas_algorithms) # used by a unit test
 
 envPrepend(LD_LIBRARY_PATH, ${PRODUCT_DIR}/lib)
