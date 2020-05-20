@@ -236,7 +236,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
         msConfig = makeMeasurementConfig(False, nsigma, nIterForRadius, kfac)
         source = measureFree(objImg, center, msConfig)
         algMeta = source.getTable().getMetadata()
-        self.assertTrue(algMeta.exists('ext_photometryKron_KronFlux_nRadiusForFlux'))
+        self.assertTrue(algMeta.exists('EXT_PHOTOMETRYKRON_KRONFLUX_NRADIUSFORFLUX'))
 
         R_K = source.get("ext_photometryKron_KronFlux_radius")
         flux_K = source.get("ext_photometryKron_KronFlux_instFlux")
@@ -247,7 +247,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
             msConfig = makeMeasurementConfig(True, nsigma, nIterForRadius, kfac)
             forced = measureForced(objImg, source, objImg.getWcs(), msConfig)
             algMeta = source.getTable().getMetadata()
-            self.assertTrue(algMeta.exists('ext_photometryKron_KronFlux_nRadiusForFlux'))
+            self.assertTrue(algMeta.exists('EXT_PHOTOMETRYKRON_KRONFLUX_NRADIUSFORFLUX'))
             for field in (
                 "ext_photometryKron_KronFlux_instFlux",
                 "ext_photometryKron_KronFlux_instFluxErr",
@@ -296,7 +296,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
         center = geom.Point2D(xcen, ycen)
         source = self.measureFree(objImg, center, msConfig)
         algMeta = source.getTable().getMetadata()
-        self.assertTrue(algMeta.exists('ext_photometryKron_KronFlux_nRadiusForFlux'))
+        self.assertTrue(algMeta.exists('EXT_PHOTOMETRYKRON_KRONFLUX_NRADIUSFORFLUX'))
 
         Mxx = source.getIxx()
         Mxy = source.getIxy()
@@ -533,7 +533,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                 msConfig = makeMeasurementConfig(forced=False, kfac=kfac)
                 source = measureFree(original, center, msConfig)
                 algMeta = source.getTable().getMetadata()
-                self.assertTrue(algMeta.exists('ext_photometryKron_KronFlux_nRadiusForFlux'))
+                self.assertTrue(algMeta.exists('EXT_PHOTOMETRYKRON_KRONFLUX_NRADIUSFORFLUX'))
                 if source.get("ext_photometryKron_KronFlux_flag"):
                     continue
 
@@ -556,7 +556,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                     msConfig = makeMeasurementConfig(kfac=kfac, forced=True)
                     forced = measureForced(warped, source, original.getWcs(), msConfig)
                     algMeta = source.getTable().getMetadata()
-                    self.assertTrue(algMeta.exists('ext_photometryKron_KronFlux_nRadiusForFlux'))
+                    self.assertTrue(algMeta.exists('EXT_PHOTOMETRYKRON_KRONFLUX_NRADIUSFORFLUX'))
 
                     if display:
                         disp1 = afwDisplay.Display(frame=1)
