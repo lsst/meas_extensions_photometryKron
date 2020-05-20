@@ -24,6 +24,7 @@
 #include <numeric>
 #include <cmath>
 #include <functional>
+#include "boost/algorithm/string.hpp"
 #include "boost/math/constants/constants.hpp"
 #include "lsst/pex/exceptions.h"
 #include "lsst/geom/Point.h"
@@ -379,7 +380,9 @@ KronFluxAlgorithm::KronFluxAlgorithm(
     _centroidExtractor(schema, name, true)
 {
     _flagHandler = meas::base::FlagHandler::addFields(schema, name, getFlagDefinitions());
-    metadata.add(name + "_nRadiusForFlux", ctrl.nRadiusForFlux);
+    auto metadataName = name + "_nRadiusForflux";
+    boost::to_upper(metadataName);
+    metadata.add(metadataName, ctrl.nRadiusForFlux);
 }
 
 void KronFluxAlgorithm::fail(
