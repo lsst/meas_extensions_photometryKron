@@ -270,8 +270,8 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
             shape = source.getShape()
             if True:                    # nsigma*shape, the radius used to estimate R_K
                 shape = shape.clone()
-                shape.scale(source.get("ext_photometryKron_KronFlux_radius_for_radius") /
-                            shape.getDeterminantRadius())
+                shape.scale(source.get("ext_photometryKron_KronFlux_radius_for_radius")
+                            / shape.getDeterminantRadius())
                 disp.dot(shape, xcen, ycen, ctype=afwDisplay.MAGENTA)
             # Show R_K
             shape = shape.clone()
@@ -320,8 +320,8 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
         fpEllipse = afwDetection.Footprint(ellipse)
 
         sumI = 0.0
-        sumR = (0.38259771140356325/ab*(1 + math.sqrt(2)*math.hypot(math.fmod(xcen, 1), math.fmod(ycen, 1))) *
-                objImg.image[int(xcen), int(ycen), afwImage.LOCAL])
+        sumR = (0.38259771140356325/ab*(1 + math.sqrt(2)*math.hypot(math.fmod(xcen, 1), math.fmod(ycen, 1)))
+                * objImg.image[int(xcen), int(ycen), afwImage.LOCAL])
 
         gal = objImg.image
 
@@ -569,9 +569,9 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                             disp1.dot(shape, xc, yc, ctype=ct)
                         disp2 = afwDisplay.Display(frame=2)
                         disp2.mtv(warped, title=self._testMethodName + ": warped image")
-                        transform = (wcs.linearizeSkyToPixel(source.getCoord(), lsst.geom.degrees) *
-                                     original.getWcs().linearizePixelToSky(source.getCoord(),
-                                                                           lsst.geom.degrees))
+                        transform = (wcs.linearizeSkyToPixel(source.getCoord(), lsst.geom.degrees)
+                                     * original.getWcs().linearizePixelToSky(source.getCoord(),
+                                                                             lsst.geom.degrees))
                         shape = shape.transform(transform.getLinear())
                         radius = source.get("ext_photometryKron_KronFlux_radius")
                         xc, yc = wcs.skyToPixel(source.getCoord())
