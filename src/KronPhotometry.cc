@@ -231,7 +231,7 @@ afw::geom::ellipses::Axes KronAperture::getKronAxes(
 }
 
 template<typename ImageT>
-PTR(KronAperture) KronAperture::determineRadius(
+std::shared_ptr<KronAperture> KronAperture::determineRadius(
     ImageT const& image,
     afw::geom::ellipses::Axes axes,
     geom::Point2D const& center,
@@ -331,7 +331,7 @@ std::pair<double, double> photometer(
 
 
 double calculatePsfKronRadius(
-    CONST_PTR(afw::detection::Psf) const& psf, // PSF to measure
+    std::shared_ptr<afw::detection::Psf const> const& psf, // PSF to measure
     geom::Point2D const& center, // Centroid of source on parent image
     double smoothingSigma=0.0         // Gaussian sigma of smoothing applied
     )
@@ -502,7 +502,7 @@ void KronFluxAlgorithm::measure(
         }
     }
 
-    PTR(KronAperture) aperture;
+    std::shared_ptr<KronAperture> aperture;
     if (_ctrl.fixed) {
         aperture.reset(new KronAperture(source));
     } else {
@@ -575,7 +575,7 @@ void KronFluxAlgorithm::measureForced(
 }
 
 
-PTR(KronAperture) KronFluxAlgorithm::_fallbackRadius(afw::table::SourceRecord& source, double const R_K_psf,
+std::shared_ptr<KronAperture> KronFluxAlgorithm::_fallbackRadius(afw::table::SourceRecord& source, double const R_K_psf,
                                             pex::exceptions::Exception& exc) const
 {
     _flagHandler.setValue(source, BAD_RADIUS.number, true);
@@ -593,14 +593,14 @@ PTR(KronAperture) KronFluxAlgorithm::_fallbackRadius(afw::table::SourceRecord& s
             NO_FALLBACK_RADIUS.number
         );
     }
-    PTR(KronAperture) aperture(new KronAperture(source));
+    std::shared_ptr<KronAperture> aperture(new KronAperture(source));
     aperture->getAxes().scale(newRadius/aperture->getAxes().getDeterminantRadius());
     return aperture;
 }
 
 
 #define INSTANTIATE(TYPE) \
-template PTR(KronAperture) KronAperture::determineRadius<afw::image::MaskedImage<TYPE> >( \
+template std::shared_ptr<KronAperture> KronAperture::determineRadius<afw::image::MaskedImage<TYPE> >( \
     afw::image::MaskedImage<TYPE> const&, \
     afw::geom::ellipses::Axes, \
     geom::Point2D const&, \
