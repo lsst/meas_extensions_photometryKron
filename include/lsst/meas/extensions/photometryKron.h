@@ -144,7 +144,7 @@ private:
         geom::AffineTransform const & refToMeas
     ) const;
 
-    PTR(KronAperture) _fallbackRadius(afw::table::SourceRecord& source, double const R_K_psf,
+    std::shared_ptr<KronAperture> _fallbackRadius(afw::table::SourceRecord& source, double const R_K_psf,
                                       pex::exceptions::Exception& exc) const;
 
     std::string _name;
@@ -196,7 +196,7 @@ public:
     /// Determines the object Kron aperture, using the shape from source.getShape()
     /// (e.g. SDSS's adaptive moments)
     template<typename ImageT>
-    static PTR(KronAperture) determineRadius(
+    static std::shared_ptr<KronAperture> determineRadius(
         ImageT const& image,  ///< Image to measure
         afw::geom::ellipses::Axes axes,  ///< Shape of aperture
         geom::Point2D const& center,   ///< Centre of source
@@ -212,7 +212,7 @@ public:
         ) const;
 
     /// Transform a Kron Aperture to a different frame
-    PTR(KronAperture) transform(geom::AffineTransform const& trans) const {
+    std::shared_ptr<KronAperture> transform(geom::AffineTransform const& trans) const {
         geom::Point2D const center = trans(getCenter());
         afw::geom::ellipses::Axes const axes(*getAxes().transform(trans.getLinear()).copy());
         return std::make_shared<KronAperture>(center, axes);
