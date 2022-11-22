@@ -484,7 +484,7 @@ void KronFluxAlgorithm::measure(
                 BAD_SHAPE_NO_PSF.number
             );
         }
-        axes = exposure.getPsf()->computeShape();
+        axes = exposure.getPsf()->computeShape(exposure.getPsf()->getAveragePosition());
         _flagHandler.setValue(source, BAD_SHAPE.number, true);
     }
     if (_ctrl.useFootprintRadius) {
