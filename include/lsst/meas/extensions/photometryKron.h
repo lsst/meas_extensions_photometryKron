@@ -66,6 +66,8 @@ public:
                        "Smooth image with N(0, smoothingSigma^2) Gaussian while estimating R_K");
     LSST_CONTROL_FIELD(refRadiusName, std::string,
                        "Name of field specifying reference Kron radius for forced measurement");
+    LSST_CONTROL_FIELD(maxRadius, double,
+                       "Maximum aperture radius in pixels; used to avoid excess memory consumption for faint objects");
 
     KronFluxControl() :
         fixed(false),
@@ -77,7 +79,8 @@ public:
         enforceMinimumRadius(true),
         useFootprintRadius(false),
         smoothingSigma(-1.0),
-        refRadiusName("ext_photometryKron_KronFlux_radius")
+        refRadiusName("ext_photometryKron_KronFlux_radius"),
+        maxRadius(200.0)
     {}
 };
 
