@@ -295,6 +295,11 @@ std::shared_ptr<KronAperture> KronAperture::determineRadius(
         radius0 = radius;
 
         axes.scale(radius/axes.getDeterminantRadius()); // set axes to our current estimate of R_K
+
+        if (radius > ctrl.maxRadius) {
+            throw LSST_EXCEPT(BadKronException, "Kron radius too large");
+        }
+
         iRFunctor.reset();
     }
 
