@@ -62,8 +62,7 @@ void declareKronFluxControl(py::module &mod) {
 }
 
 void declareKronFluxAlgorithm(py::module &mod) {
-    py::class_<KronFluxAlgorithm, std::shared_ptr<KronFluxAlgorithm>, base::SimpleAlgorithm> cls(
-            mod, "KronFluxAlgorithm");
+    py::class_<KronFluxAlgorithm, base::SimpleAlgorithm> cls(mod, "KronFluxAlgorithm");
 
     cls.def_static("getFlagDefinitions", &KronFluxAlgorithm::getFlagDefinitions,
                    py::return_value_policy::copy);
