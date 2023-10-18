@@ -126,6 +126,7 @@ def makeMeasurementConfig(forced=False, nsigma=6.0, nIterForRadius=1, kfac=2.5):
     msConfig.slots.gaussianFlux = None
     msConfig.slots.calibFlux = None
     # msConfig.algorithms.names.remove("correctfluxes")
+    msConfig.plugins["base_SdssCentroid"].maxDistToPeak = -1
     msConfig.plugins["ext_photometryKron_KronFlux"].nSigmaForRadius = nsigma
     msConfig.plugins["ext_photometryKron_KronFlux"].nIterForRadius = nIterForRadius
     msConfig.plugins["ext_photometryKron_KronFlux"].nRadiusForFlux = kfac
