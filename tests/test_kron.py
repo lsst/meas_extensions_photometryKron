@@ -126,6 +126,7 @@ def makeMeasurementConfig(forced=False, nsigma=6.0, nIterForRadius=1, kfac=2.5):
     msConfig.slots.gaussianFlux = None
     msConfig.slots.calibFlux = None
     # msConfig.algorithms.names.remove("correctfluxes")
+    msConfig.plugins["base_SdssCentroid"].maxDistToPeak = -1
     msConfig.plugins["ext_photometryKron_KronFlux"].nSigmaForRadius = nsigma
     msConfig.plugins["ext_photometryKron_KronFlux"].nIterForRadius = nIterForRadius
     msConfig.plugins["ext_photometryKron_KronFlux"].nRadiusForFlux = kfac
@@ -417,7 +418,7 @@ class KronPhotometryTestCase(lsst.utils.tests.TestCase):
                                     print("%s R_K    %10.3f %10.3f %6.3f pixels (tol %5.3f)%s" %
                                           (ID, R_K, R_truth, (R_K - R_truth), 1e-2*self.getTolRad(a, b),
                                            " *" if failR else ""))
-                                    print("%s flux_K %10.3f %10.3f %6.2f%%       (tol %5.3f) %s" %
+                                    print("%s flux_K %10.3f %10.3f %6.2f%%       (tol %5.3f)%s" %
                                           (ID, flux_K, flux_truth,
                                            100*(flux_K/flux_truth - 1), self.getTolFlux(a, b, kfac),
                                            " *" if failFlux else ""))
