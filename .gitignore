@@ -19,3 +19,4 @@ doc/htmlDir
 tests/.tests
 ups/*.cfgc
 python/lsst/meas/extensions/photometryKron/version.py
+python/*.dist-info/
