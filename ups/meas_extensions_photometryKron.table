@@ -1,4 +1,9 @@
+setupRequired(afw)
+setupRequired(daf_base)
 setupRequired(meas_base)
+
+# For tests
+setupRequired(utils)
 setupOptional(meas_algorithms) # used by a unit test
 
 envPrepend(LD_LIBRARY_PATH, ${PRODUCT_DIR}/lib)
