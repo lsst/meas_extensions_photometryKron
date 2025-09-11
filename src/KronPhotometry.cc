@@ -128,7 +128,8 @@ public:
 #if 0
                            _sumVar(0.0), _sumRVar(0.0),
 #endif
-                           _imageX0(mimage.getX0()), _imageY0(mimage.getY0())
+                           _imageX0(mimage.getX0()), _imageY0(mimage.getY0()),
+                           _imageWidth(mimage.getWidth()), _imageHeight(mimage.getHeight())
         {}
 
     /// @brief Reset everything for a new Footprint
@@ -139,17 +140,16 @@ public:
         _sumVar = _sumRVar = 0.0;
 #endif
 
-        MaskedImageT const& mimage = this->getImage();
         geom::Box2I const& bbox(foot.getBBox());
         int const x0 = bbox.getMinX(), y0 = bbox.getMinY(), x1 = bbox.getMaxX(), y1 = bbox.getMaxY();
 
         if (x0 < _imageX0 || y0 < _imageY0 ||
-            x1 >= _imageX0 + mimage.getWidth() || y1 >= _imageY0 + mimage.getHeight()) {
+            x1 >= _imageX0 + _imageWidth || y1 >= _imageY0 + _imageHeight) {
             throw LSST_EXCEPT(lsst::pex::exceptions::OutOfRangeError,
                               (boost::format("Footprint %d,%d--%d,%d doesn't fit in image %d,%d--%d,%d")
                                % x0 % y0 % x1 % y1
                                % _imageX0 % _imageY0
-                               % (_imageX0 + mimage.getWidth() - 1) % (_imageY0 + mimage.getHeight() - 1)
+                               % (_imageX0 + _imageWidth - 1) % (_imageY0 + _imageHeight - 1)
                               ).str());
         }
     }
@@ -215,6 +215,7 @@ private:
     double _sumRVar;                    // sum of R*R*Var(I)
 #endif
     int const _imageX0, _imageY0;       // origin of image we're measuring
+    int const _imageWidth, _imageHeight; // size of image we're measuring
 
 };
 } // end anonymous namespace
