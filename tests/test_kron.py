@@ -110,7 +110,7 @@ def makeMeasurementConfig(forced=False, nsigma=6.0, nIterForRadius=1, kfac=2.5):
     if forced:
         msConfig = measBase.ForcedMeasurementConfig()
         msConfig.algorithms.names = ["base_TransformedCentroid", "base_TransformedShape",
-                                     "ext_photometryKron_KronFlux"]
+                                     "ext_photometryKron_KronFlux", "base_PixelFlags"]
         msConfig.slots.centroid = "base_TransformedCentroid"
         msConfig.slots.shape = "base_TransformedShape"
         msConfig.copyColumns = {"id": "objectId", "parent": "parentObjectId"}
