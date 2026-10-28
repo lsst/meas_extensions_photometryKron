@@ -1,0 +1,12 @@
+prefix=${pcfiledir}/../..
+includedir=${prefix}/include
+libdir=${prefix}/lib
+doxygen_tag=${prefix}/doc/meas_extensions_photometryKron.tag
+lsst_build_requires=pybind11 python3
+
+Name: lsst_meas_extensions_photometryKron
+Description: LSST Science Pipelines Kron photometry
+Version: @VERSION@
+Requires: lsst_afw lsst_meas_base
+Cflags: -I${includedir}
+Libs: -L${libdir} -lmeas_extensions_photometryKron
